@@ -202,10 +202,14 @@ func slugify(name string) string {
 // a manifest default fills the rest and a missing required value is an
 // error; otherwise the user is prompted on stdin.
 func collectValues(cmd *cobra.Command, selected []*plugin.Plugin, opts newOptions, appName string) (scaffold.Values, error) {
+	serviceName := appName + "-api"
 	values := scaffold.Values{
-		"APP_NAME":           appName,
-		"SERVICE_NAME":       appName + "-api",
-		"SERVICE_NAME_UPPER": strings.ToUpper(strings.ReplaceAll(appName, "-", "_")),
+		"APP_NAME":     appName,
+		"SERVICE_NAME": serviceName,
+		// Upper-snake form of SERVICE_NAME, e.g. "demoapp-api" -> "DEMOAPP_API" —
+		// used to build a per-service image-tag env var name like
+		// ${DEMOAPP_API_TAG:-latest}, matching afterknot's convention.
+		"SERVICE_NAME_UPPER": strings.ToUpper(strings.ReplaceAll(serviceName, "-", "_")),
 		"STACK_NAME":         appName,
 	}
 
