@@ -9,7 +9,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/surebits/kiln/internal/scaffold"
+	"github.com/breadface/kiln/internal/scaffold"
 )
 
 // TestNewEndToEnd drives the real `kiln new` command against the actual

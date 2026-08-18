@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/surebits/kiln/internal/plugin"
+	"github.com/breadface/kiln/internal/plugin"
 )
 
 func TestSlugify(t *testing.T) {

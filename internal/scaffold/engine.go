@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/surebits/kiln/internal/plugin"
-	"github.com/surebits/kiln/internal/scaffold/fragment"
+	"github.com/breadface/kiln/internal/plugin"
+	"github.com/breadface/kiln/internal/scaffold/fragment"
 )
 
 // GoWorkShell is the base go.work content the engine synthesizes when two or

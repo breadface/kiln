@@ -11,10 +11,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/surebits/kiln/internal/manifest"
-	"github.com/surebits/kiln/internal/plugin"
-	"github.com/surebits/kiln/internal/scaffold"
-	"github.com/surebits/kiln/plugins"
+	"github.com/breadface/kiln/internal/manifest"
+	"github.com/breadface/kiln/internal/plugin"
+	"github.com/breadface/kiln/internal/scaffold"
+	"github.com/breadface/kiln/plugins"
 )
 
 type newOptions struct {

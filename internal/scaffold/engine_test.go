@@ -7,7 +7,7 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/surebits/kiln/internal/plugin"
+	"github.com/breadface/kiln/internal/plugin"
 )
 
 func fakeBackendPlugin() *plugin.Plugin {

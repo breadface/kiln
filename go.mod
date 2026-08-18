@@ -1,4 +1,4 @@
-module github.com/surebits/kiln
+module github.com/breadface/kiln
 
 go 1.26.4
 

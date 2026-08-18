@@ -9,7 +9,7 @@ import (
 
 // Version is set at build time via -ldflags, e.g.:
 //
-//	go build -ldflags "-X github.com/surebits/kiln/internal/cli.Version=v0.1.0"
+//	go build -ldflags "-X github.com/breadface/kiln/internal/cli.Version=v0.1.0"
 var Version = "dev"
 
 func newRootCmd() *cobra.Command {

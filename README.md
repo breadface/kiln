@@ -29,7 +29,7 @@ myapp/
 ## Install
 
 ```sh
-go install github.com/surebits/kiln/cmd/kiln@latest
+go install github.com/breadface/kiln/cmd/kiln@latest
 ```
 
 ## Status
