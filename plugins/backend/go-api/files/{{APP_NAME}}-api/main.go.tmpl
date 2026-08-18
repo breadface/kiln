@@ -1,0 +1,43 @@
+// Command {{APP_NAME}}-api is the HTTP API entrypoint.
+package main
+
+import (
+	"flag"
+	"log"
+	"net/http"
+
+	"{{MODULE_PATH}}/config"
+	"{{MODULE_PATH}}/db"
+	"{{MODULE_PATH}}/server"
+)
+
+func main() {
+	migrate := flag.Bool("migrate", false, "run database migrations and exit")
+	flag.Parse()
+
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("loading config: %v", err)
+	}
+
+	conn, err := db.Connect(cfg.DatabaseURL)
+	if err != nil {
+		log.Fatalf("connecting to database: %v", err)
+	}
+
+	if *migrate {
+		if err := db.Migrate(conn); err != nil {
+			log.Fatalf("migrating: %v", err)
+		}
+		log.Println("migrations complete")
+		return
+	}
+
+	srv := &server.Server{DB: conn}
+	handler := srv.New(cfg.CORSOrigins)
+
+	log.Printf("listening on :%s", cfg.Port)
+	if err := http.ListenAndServe(":"+cfg.Port, handler); err != nil {
+		log.Fatalf("server error: %v", err)
+	}
+}

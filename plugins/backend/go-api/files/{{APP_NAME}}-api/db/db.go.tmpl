@@ -1,0 +1,56 @@
+// Package db manages the Postgres connection and schema migrations.
+package db
+
+import (
+	"fmt"
+	"time"
+
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+)
+
+// Example is a placeholder model proving the migration path works end to
+// end. Replace it with your own domain models.
+type Example struct {
+	ID        uint `gorm:"primaryKey"`
+	Name      string
+	CreatedAt time.Time
+}
+
+// Connect opens a Postgres connection pool, verifies it, and runs the
+// minimal AutoMigrate needed for the app to boot. Larger schema changes
+// belong in Migrate, run explicitly via `-migrate` as a one-off release
+// step — not on every boot, so a rolling deploy never runs migrations from
+// more than one container at once.
+func Connect(dsn string) (*gorm.DB, error) {
+	gdb, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	if err != nil {
+		return nil, fmt.Errorf("connecting to database: %w", err)
+	}
+
+	sqlDB, err := gdb.DB()
+	if err != nil {
+		return nil, fmt.Errorf("getting underlying sql.DB: %w", err)
+	}
+	sqlDB.SetMaxOpenConns(10)
+	sqlDB.SetMaxIdleConns(5)
+	sqlDB.SetConnMaxLifetime(30 * time.Minute)
+
+	if err := sqlDB.Ping(); err != nil {
+		return nil, fmt.Errorf("pinging database: %w", err)
+	}
+
+	if err := gdb.AutoMigrate(&Example{}); err != nil {
+		return nil, fmt.Errorf("auto-migrating: %w", err)
+	}
+	return gdb, nil
+}
+
+// Migrate runs the full schema migration. It's invoked via `main -migrate`
+// as a one-off release step, not on every process boot.
+func Migrate(gdb *gorm.DB) error {
+	if err := gdb.AutoMigrate(&Example{}); err != nil {
+		return fmt.Errorf("migrating: %w", err)
+	}
+	return nil
+}

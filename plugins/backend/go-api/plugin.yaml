@@ -1,0 +1,17 @@
+name: go-api
+kind: backend
+version: 0.1.0
+description: >-
+  Minimal Go HTTP API starter: stdlib net/http routing, env-based config,
+  Postgres via gorm, and a Connect/Migrate split for safe deploys.
+
+placeholders:
+  - name: MODULE_PATH
+    description: "Go module path for the generated API, e.g. github.com/you/myapp-api"
+    required: true
+  - name: PORT
+    description: HTTP port the API listens on
+    default: "8080"
+
+post_copy: hooks/post_copy.sh
+contributes_go_module: true

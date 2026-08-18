@@ -1,0 +1,10 @@
+# Copy to .env and fill in real values before running locally.
+
+PORT={{PORT}}
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/{{APP_NAME}}?sslmode=disable
+JWT_SECRET=change-me-in-production
+CORS_ORIGINS=*
+
+# Postgres is assumed to be externally managed (a local install, or a
+# managed provider) — this project doesn't run Postgres itself, locally or
+# in production. Point DATABASE_URL above at whichever instance you use.

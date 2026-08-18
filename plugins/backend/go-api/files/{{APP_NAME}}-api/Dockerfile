@@ -1,0 +1,12 @@
+FROM golang:1.23-alpine AS builder
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 go build -o /out/api-server .
+
+FROM alpine:latest
+WORKDIR /app
+COPY --from=builder /out/api-server .
+EXPOSE {{PORT}}
+CMD ["./api-server"]

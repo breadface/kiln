@@ -1,0 +1,51 @@
+// Package dotenv provides a minimal .env file loader.
+package dotenv
+
+import (
+	"bufio"
+	"os"
+	"strings"
+)
+
+// Load reads KEY=VALUE lines from each path in order, skipping blank lines
+// and lines starting with '#'. A key already set in the real environment is
+// never overridden — real environment variables always win over .env files.
+// Missing files are silently skipped.
+func Load(paths ...string) error {
+	for _, path := range paths {
+		if err := loadFile(path); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func loadFile(path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		key, value, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		key = strings.TrimSpace(key)
+		value = strings.TrimSpace(value)
+		if _, exists := os.LookupEnv(key); exists {
+			continue
+		}
+		os.Setenv(key, value)
+	}
+	return scanner.Err()
+}
