@@ -1,0 +1,176 @@
+package scaffold
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"testing/fstest"
+
+	"github.com/surebits/kiln/internal/plugin"
+)
+
+func fakeBackendPlugin() *plugin.Plugin {
+	return &plugin.Plugin{
+		Manifest: plugin.Manifest{
+			Name: "go-api", Kind: plugin.KindBackend,
+			ContributesGoModule: true,
+			Executable:          []string{"deploy-helper.sh"},
+			PostCopy:            "hooks/post_copy.sh",
+		},
+		FS: fstest.MapFS{
+			"files/main.go":            &fstest.MapFile{Data: []byte("// {{APP_NAME}} entrypoint\n")},
+			"files/deploy-helper.sh":   &fstest.MapFile{Data: []byte("#!/bin/sh\necho ok\n")},
+			"fragments/docker-compose.fragment.yml": &fstest.MapFile{
+				Data: []byte("services:\n  api:\n    image: {{APP_NAME}}-api\n"),
+			},
+			"hooks/post_copy.sh": &fstest.MapFile{
+				Data: []byte("#!/bin/sh\necho \"domain=$KILN_DOMAIN\" > post_copy_ran.txt\n"),
+			},
+		},
+	}
+}
+
+func fakeHostingPlugin() *plugin.Plugin {
+	return &plugin.Plugin{
+		Manifest: plugin.Manifest{Name: "docker-swarm-hetzner", Kind: plugin.KindHosting},
+		FS: fstest.MapFS{
+			"files/Caddyfile": &fstest.MapFile{
+				Data: []byte("{\n\temail {{ADMIN_EMAIL}}\n}\n\n# kiln:insert\n"),
+			},
+			"fragments/docker-compose.fragment.yml": &fstest.MapFile{
+				Data: []byte("services:\n  caddy:\n    image: caddy:2-alpine\n"),
+			},
+			"fragments/Caddyfile.fragment": &fstest.MapFile{
+				Data: []byte("{{DOMAIN}} {\n\treverse_proxy api:{{PORT}}\n}\n"),
+			},
+		},
+	}
+}
+
+func fakeGoModulePlugin(kind plugin.Kind, name, goWorkEntry string) *plugin.Plugin {
+	return &plugin.Plugin{
+		Manifest: plugin.Manifest{Name: name, Kind: kind, ContributesGoModule: true},
+		FS: fstest.MapFS{
+			"files/go.mod":               &fstest.MapFile{Data: []byte("module fake\n")},
+			"fragments/go.work.fragment": &fstest.MapFile{Data: []byte(goWorkEntry)},
+		},
+	}
+}
+
+func TestGenerateEndToEnd(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "demoapp")
+
+	values := Values{"APP_NAME": "demoapp", "ADMIN_EMAIL": "hello@example.com", "DOMAIN": "demo.example.com", "PORT": "8080", "DOMAIN_KEY": "unused"}
+
+	err := Generate(Options{
+		Plugins: []*plugin.Plugin{fakeBackendPlugin(), fakeHostingPlugin()},
+		Values:  values,
+		OutDir:  out,
+	})
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+
+	// Files copied and rendered.
+	main, err := os.ReadFile(filepath.Join(out, "main.go"))
+	if err != nil {
+		t.Fatalf("reading generated main.go: %v", err)
+	}
+	if string(main) != "// demoapp entrypoint\n" {
+		t.Errorf("main.go = %q, placeholder not substituted", main)
+	}
+
+	// Executable bit restored.
+	info, err := os.Stat(filepath.Join(out, "deploy-helper.sh"))
+	if err != nil {
+		t.Fatalf("stat deploy-helper.sh: %v", err)
+	}
+	if info.Mode()&0o111 == 0 {
+		t.Error("deploy-helper.sh should be executable after generation")
+	}
+
+	// Compose fragments merged from both plugins.
+	compose, err := os.ReadFile(filepath.Join(out, "docker-compose.yml"))
+	if err != nil {
+		t.Fatalf("reading docker-compose.yml: %v", err)
+	}
+	if !strings.Contains(string(compose), "demoapp-api") || !strings.Contains(string(compose), "caddy:2-alpine") {
+		t.Errorf("docker-compose.yml missing merged content:\n%s", compose)
+	}
+
+	// Caddyfile text-fragment merge.
+	caddy, err := os.ReadFile(filepath.Join(out, "Caddyfile"))
+	if err != nil {
+		t.Fatalf("reading Caddyfile: %v", err)
+	}
+	if !strings.Contains(string(caddy), "demo.example.com") || !strings.Contains(string(caddy), "reverse_proxy api:8080") {
+		t.Errorf("Caddyfile missing merged fragment:\n%s", caddy)
+	}
+	if strings.Contains(string(caddy), "kiln:insert") {
+		t.Error("Caddyfile marker should have been replaced")
+	}
+
+	// No go.work with only one Go-module plugin selected.
+	if _, err := os.Stat(filepath.Join(out, "go.work")); !os.IsNotExist(err) {
+		t.Error("go.work should not be generated with a single Go-module plugin")
+	}
+
+	// post_copy hook ran with the resolved values available as KILN_ env vars.
+	ran, err := os.ReadFile(filepath.Join(out, "post_copy_ran.txt"))
+	if err != nil {
+		t.Fatalf("post_copy hook did not run: %v", err)
+	}
+	if strings.TrimSpace(string(ran)) != "domain=demo.example.com" {
+		t.Errorf("post_copy hook saw wrong KILN_DOMAIN: %q", ran)
+	}
+}
+
+func TestGenerateGoWorkNeedsTwoModules(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "demoapp")
+
+	err := Generate(Options{
+		Plugins: []*plugin.Plugin{
+			fakeGoModulePlugin(plugin.KindBackend, "go-api", "./demoapp-api"),
+			fakeGoModulePlugin(plugin.KindPayments, "flutterwave", "./demoapp-payments-flutterwave"),
+		},
+		Values: Values{},
+		OutDir: out,
+	})
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+
+	goWork, err := os.ReadFile(filepath.Join(out, "go.work"))
+	if err != nil {
+		t.Fatalf("go.work should be generated with two Go-module plugins: %v", err)
+	}
+	if !strings.Contains(string(goWork), "./demoapp-api") || !strings.Contains(string(goWork), "./demoapp-payments-flutterwave") {
+		t.Errorf("go.work missing both module entries:\n%s", goWork)
+	}
+}
+
+func TestGenerateComposeConflict(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "demoapp")
+
+	conflicting := &plugin.Plugin{
+		Manifest: plugin.Manifest{Name: "conflicting", Kind: plugin.KindGlue},
+		FS: fstest.MapFS{
+			"fragments/docker-compose.fragment.yml": &fstest.MapFile{
+				Data: []byte("services:\n  api:\n    image: some-other-image\n"),
+			},
+		},
+	}
+
+	err := Generate(Options{
+		Plugins: []*plugin.Plugin{fakeBackendPlugin(), conflicting},
+		Values:  Values{"APP_NAME": "demoapp"},
+		OutDir:  out,
+	})
+	if err == nil {
+		t.Fatal("expected a merge conflict error, got nil")
+	}
+}
