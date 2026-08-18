@@ -1,0 +1,22 @@
+name: docker-swarm-hetzner
+kind: hosting
+version: 0.1.0
+description: >-
+  Self-hosted deploy: GitHub Actions builds and pushes to GHCR, a Hetzner
+  (or any) VPS running Docker Swarm pulls and rolls out, and Caddy fronts
+  everything with automatic TLS. v0 assumes exactly one backend service,
+  proxied by domain to SERVICE_NAME:PORT.
+
+placeholders:
+  - name: DOMAIN
+    description: Primary domain Caddy will serve and get a TLS certificate for
+    required: true
+  - name: ADMIN_EMAIL
+    description: Email Caddy registers with its ACME/TLS certificate authority
+    required: true
+  - name: GHCR_OWNER
+    description: "GHCR namespace to push images to, e.g. your GitHub username or org"
+    required: true
+
+executable:
+  - "deploy.sh"

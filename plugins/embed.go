@@ -6,5 +6,5 @@ package plugins
 
 import "embed"
 
-//go:embed backend
+//go:embed backend hosting
 var FS embed.FS

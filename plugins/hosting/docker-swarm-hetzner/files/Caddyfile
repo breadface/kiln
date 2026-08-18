@@ -1,0 +1,7 @@
+{
+	email {{ADMIN_EMAIL}}
+	# Caddy stores certs in the caddy_data volume — persisted across restarts.
+	# No init script, no reload hooks, no certbot. It just works.
+}
+
+# kiln:insert

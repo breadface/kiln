@@ -1,0 +1,46 @@
+# Production overlay — merged on top of docker-compose.yml at deploy time:
+#   docker stack deploy -c docker-compose.yml -c docker-compose.swarm.yml \
+#     --with-registry-auth {{STACK_NAME}}
+#
+# docker stack deploy never builds images (Swarm only pulls them), so this
+# file adds `image:` per service rather than needing to remove `build:` —
+# the base file's `build:` key is simply ignored in Swarm mode.
+#
+# The caddy service picks up an *externally* created Swarm config here
+# (see deploy.sh) instead of relying only on the bind-mounted Caddyfile
+# from docker-compose.yml. Swarm configs are immutable and versioned by
+# name, so a changed Caddyfile means creating a new named config and
+# pointing this file's `configs.caddyfile.name` at it — that's also what
+# makes Swarm recognize the caddy service needs to restart at all; a plain
+# bind mount's contents changing wouldn't trigger anything on its own.
+
+services:
+  {{SERVICE_NAME}}:
+    image: ghcr.io/{{GHCR_OWNER}}/{{SERVICE_NAME}}:${{{SERVICE_NAME_UPPER}}_TAG:-latest}
+    deploy:
+      replicas: 1
+      update_config:
+        order: start-first
+        failure_action: rollback
+        monitor: 30s
+      restart_policy:
+        condition: on-failure
+
+  caddy:
+    configs:
+      - source: caddyfile
+        target: /etc/caddy/Caddyfile
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+
+networks:
+  default:
+    driver: overlay
+    attachable: true # lets standalone containers (e.g. the migration run in deploy.sh) join
+
+configs:
+  caddyfile:
+    external: true
+    name: caddyfile_${IMAGE_TAG:-latest}
