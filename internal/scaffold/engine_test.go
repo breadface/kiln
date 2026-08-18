@@ -21,6 +21,8 @@ func fakeBackendPlugin() *plugin.Plugin {
 		FS: fstest.MapFS{
 			"files/main.go":            &fstest.MapFile{Data: []byte("// {{APP_NAME}} entrypoint\n")},
 			"files/deploy-helper.sh":   &fstest.MapFile{Data: []byte("#!/bin/sh\necho ok\n")},
+			"files/go.mod.tmpl":        &fstest.MapFile{Data: []byte("module {{APP_NAME}}\n")},
+			"files/dot__env.example":   &fstest.MapFile{Data: []byte("PORT={{PORT}}\n")},
 			"fragments/docker-compose.fragment.yml": &fstest.MapFile{
 				Data: []byte("services:\n  api:\n    image: {{APP_NAME}}-api\n"),
 			},
@@ -58,6 +60,23 @@ func fakeGoModulePlugin(kind plugin.Kind, name, goWorkEntry string) *plugin.Plug
 	}
 }
 
+func TestTransformPath(t *testing.T) {
+	values := Values{"APP_NAME": "demoapp"}
+
+	cases := []struct{ in, want string }{
+		{"main.go", "main.go"},
+		{"go.mod.tmpl", "go.mod"},
+		{"dot__env.example", ".env.example"},
+		{"dot__github/workflows/deploy.yml.tmpl", ".github/workflows/deploy.yml"},
+		{"{{APP_NAME}}-api/main.go", "demoapp-api/main.go"},
+	}
+	for _, tc := range cases {
+		if got := transformPath(tc.in, values); got != tc.want {
+			t.Errorf("transformPath(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
 func TestGenerateEndToEnd(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "demoapp")
@@ -89,6 +108,22 @@ func TestGenerateEndToEnd(t *testing.T) {
 	}
 	if info.Mode()&0o111 == 0 {
 		t.Error("deploy-helper.sh should be executable after generation")
+	}
+
+	// "go.mod.tmpl" -> "go.mod" and "dot__env.example" -> ".env.example":
+	// escapes for content go:embed can't hold directly (see transformPath).
+	goMod, err := os.ReadFile(filepath.Join(out, "go.mod"))
+	if err != nil {
+		t.Fatalf("go.mod.tmpl should have been written out as go.mod: %v", err)
+	}
+	if string(goMod) != "module demoapp\n" {
+		t.Errorf("go.mod = %q, placeholder not substituted", goMod)
+	}
+	if _, err := os.ReadFile(filepath.Join(out, ".env.example")); err != nil {
+		t.Fatalf("dot__env.example should have been written out as .env.example: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(out, "go.mod.tmpl")); !os.IsNotExist(err) {
+		t.Error("go.mod.tmpl should not exist verbatim in the generated output")
 	}
 
 	// Compose fragments merged from both plugins.

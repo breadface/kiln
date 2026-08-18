@@ -138,8 +138,7 @@ func copyPluginFiles(p *plugin.Plugin, outDir string, values Values) error {
 		if err != nil {
 			return err
 		}
-		renderedRel := filepath.FromSlash(RenderString(filepath.ToSlash(rel), values))
-		target := filepath.Join(outDir, renderedRel)
+		target := filepath.Join(outDir, filepath.FromSlash(transformPath(rel, values)))
 
 		if d.IsDir() {
 			return os.MkdirAll(target, 0o755)
@@ -161,6 +160,31 @@ func copyPluginFiles(p *plugin.Plugin, outDir string, values Values) error {
 	return fixExecutableBits(p, outDir, values)
 }
 
+// transformPath renders placeholders in a plugin-relative path and applies
+// two filename escapes needed because content is stored in a //go:embed
+// tree, which can't hold every filename a generated project needs:
+//
+//   - a trailing ".tmpl" is stripped. go:embed treats any directory
+//     containing its own go.mod as a separate module boundary and silently
+//     excludes everything under it — so a plugin's go.mod template must be
+//     named "go.mod.tmpl" in files/ to be embeddable at all, and this
+//     strips it back to "go.mod" in the generated project.
+//   - a "dot__" prefix on a path segment becomes a literal leading ".".
+//     go:embed excludes dot-prefixed files by default, so a plugin's
+//     ".env.example" must be named "dot__env.example" in files/.
+func transformPath(rel string, values Values) string {
+	rendered := RenderString(filepath.ToSlash(rel), values)
+	parts := strings.Split(rendered, "/")
+	for i, seg := range parts {
+		seg = strings.TrimSuffix(seg, ".tmpl")
+		if after, ok := strings.CutPrefix(seg, "dot__"); ok {
+			seg = "." + after
+		}
+		parts[i] = seg
+	}
+	return strings.Join(parts, "/")
+}
+
 func fixExecutableBits(p *plugin.Plugin, outDir string, values Values) error {
 	if len(p.Manifest.Executable) == 0 {
 		return nil
@@ -174,7 +198,7 @@ func fixExecutableBits(p *plugin.Plugin, outDir string, values Values) error {
 		if err != nil {
 			return err
 		}
-		renderedRel := RenderString(filepath.ToSlash(rel), values)
+		renderedRel := transformPath(rel, values)
 		for _, pattern := range p.Manifest.Executable {
 			matched, err := path.Match(pattern, renderedRel)
 			if err != nil {

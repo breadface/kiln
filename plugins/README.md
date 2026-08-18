@@ -48,6 +48,32 @@ shell/Compose interpolation syntax already present in files like
 `docker-compose.yml`. An unresolved placeholder is left in the output as-is,
 which generation tooling treats as a failure signal.
 
+### Filename escapes
+
+Plugin content lives inside the `kiln` repo's own Go module and is embedded
+into the binary via `//go:embed`. Both of those facts mean some filenames a
+generated project needs can't appear literally under `files/`:
+
+- **Any `*.go` file, and `go.mod`/`go.sum`, must end in an extra `.tmpl`** —
+  e.g. `files/{{APP_NAME}}-api/main.go.tmpl`, `files/{{APP_NAME}}-api/go.mod.tmpl`.
+  Two independent reasons force this: `go build ./...`/`go test ./...` run
+  from the kiln repo root would otherwise try to compile these as real
+  packages of the kiln module (and fail — they're not, and their imports
+  reference an unresolved `{{MODULE_PATH}}`); and `go:embed` treats any
+  directory containing its own `go.mod` as a separate module boundary and
+  silently drops everything under it. Naming them `*.tmpl` sidesteps both.
+  The `.tmpl` suffix is stripped on copy — `main.go.tmpl` becomes `main.go`
+  in the generated project.
+- **Dot-prefixed files are excluded from `go:embed` by default** (e.g.
+  `.env.example`). Prefix the segment with **`dot__`** in `files/` instead —
+  `files/dot__env.example` is copied out as `.env.example`, and
+  `files/dot__github/workflows/deploy.yml.tmpl` is copied out as
+  `.github/workflows/deploy.yml`.
+
+Both escapes are stripped per path segment, after placeholder rendering, by
+the same mechanism that renders `{{APP_NAME}}` in paths — a plugin author
+doesn't need to do anything beyond naming the file correctly in `files/`.
+
 ## Fragments
 
 Some files — `docker-compose.yml`, `Caddyfile`, `go.work` — are contributed to
