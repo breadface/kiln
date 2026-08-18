@@ -34,11 +34,21 @@ type Project struct {
 	Values      map[string]string `yaml:"values,omitempty"`
 }
 
-// Write serializes p as YAML into dir/kiln.yaml.
-func Write(dir string, p Project) error {
+// Marshal serializes p as YAML. It does no I/O, so it's safe to call from
+// contexts without a real filesystem (e.g. compiled to WebAssembly).
+func Marshal(p Project) ([]byte, error) {
 	data, err := yaml.Marshal(p)
 	if err != nil {
-		return fmt.Errorf("marshaling %s: %w", FileName, err)
+		return nil, fmt.Errorf("marshaling %s: %w", FileName, err)
+	}
+	return data, nil
+}
+
+// Write serializes p as YAML into dir/kiln.yaml.
+func Write(dir string, p Project) error {
+	data, err := Marshal(p)
+	if err != nil {
+		return err
 	}
 	if err := os.WriteFile(filepath.Join(dir, FileName), data, 0o644); err != nil {
 		return fmt.Errorf("writing %s: %w", FileName, err)

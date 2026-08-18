@@ -83,13 +83,15 @@ func TestGenerateEndToEnd(t *testing.T) {
 
 	values := Values{"APP_NAME": "demoapp", "ADMIN_EMAIL": "hello@example.com", "DOMAIN": "demo.example.com", "PORT": "8080", "DOMAIN_KEY": "unused"}
 
-	err := Generate(Options{
+	result, err := Generate(Options{
 		Plugins: []*plugin.Plugin{fakeBackendPlugin(), fakeHostingPlugin()},
 		Values:  values,
-		OutDir:  out,
 	})
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
+	}
+	if err := WriteToDisk(result, out); err != nil {
+		t.Fatalf("WriteToDisk: %v", err)
 	}
 
 	// Files copied and rendered.
@@ -152,6 +154,31 @@ func TestGenerateEndToEnd(t *testing.T) {
 		t.Error("go.work should not be generated with a single Go-module plugin")
 	}
 
+	// Generate itself never runs hooks — see TestRunHooksPostCopy. Confirm
+	// that directly here too, since it's easy to regress silently.
+	if _, err := os.Stat(filepath.Join(out, "post_copy_ran.txt")); !os.IsNotExist(err) {
+		t.Error("Generate should not run post_copy hooks; that's RunHooks' job")
+	}
+}
+
+func TestRunHooksPostCopy(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "demoapp")
+
+	values := Values{"APP_NAME": "demoapp", "ADMIN_EMAIL": "hello@example.com", "DOMAIN": "demo.example.com", "PORT": "8080"}
+	plugins := []*plugin.Plugin{fakeBackendPlugin(), fakeHostingPlugin()}
+
+	result, err := Generate(Options{Plugins: plugins, Values: values})
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	if err := WriteToDisk(result, out); err != nil {
+		t.Fatalf("WriteToDisk: %v", err)
+	}
+	if err := RunHooks(plugins, out, values); err != nil {
+		t.Fatalf("RunHooks: %v", err)
+	}
+
 	// post_copy hook ran with the resolved values available as KILN_ env vars.
 	ran, err := os.ReadFile(filepath.Join(out, "post_copy_ran.txt"))
 	if err != nil {
@@ -163,34 +190,27 @@ func TestGenerateEndToEnd(t *testing.T) {
 }
 
 func TestGenerateGoWorkNeedsTwoModules(t *testing.T) {
-	dir := t.TempDir()
-	out := filepath.Join(dir, "demoapp")
-
-	err := Generate(Options{
+	result, err := Generate(Options{
 		Plugins: []*plugin.Plugin{
 			fakeGoModulePlugin(plugin.KindBackend, "go-api", "./demoapp-api"),
 			fakeGoModulePlugin(plugin.KindPayments, "flutterwave", "./demoapp-payments-flutterwave"),
 		},
 		Values: Values{},
-		OutDir: out,
 	})
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
 	}
 
-	goWork, err := os.ReadFile(filepath.Join(out, "go.work"))
-	if err != nil {
-		t.Fatalf("go.work should be generated with two Go-module plugins: %v", err)
+	goWork, ok := result.Files["go.work"]
+	if !ok {
+		t.Fatal("go.work should be generated with two Go-module plugins")
 	}
-	if !strings.Contains(string(goWork), "./demoapp-api") || !strings.Contains(string(goWork), "./demoapp-payments-flutterwave") {
-		t.Errorf("go.work missing both module entries:\n%s", goWork)
+	if !strings.Contains(string(goWork.Content), "./demoapp-api") || !strings.Contains(string(goWork.Content), "./demoapp-payments-flutterwave") {
+		t.Errorf("go.work missing both module entries:\n%s", goWork.Content)
 	}
 }
 
 func TestGenerateComposeConflict(t *testing.T) {
-	dir := t.TempDir()
-	out := filepath.Join(dir, "demoapp")
-
 	conflicting := &plugin.Plugin{
 		Manifest: plugin.Manifest{Name: "conflicting", Kind: plugin.KindGlue},
 		FS: fstest.MapFS{
@@ -200,10 +220,9 @@ func TestGenerateComposeConflict(t *testing.T) {
 		},
 	}
 
-	err := Generate(Options{
+	_, err := Generate(Options{
 		Plugins: []*plugin.Plugin{fakeBackendPlugin(), conflicting},
 		Values:  Values{"APP_NAME": "demoapp"},
-		OutDir:  out,
 	})
 	if err == nil {
 		t.Fatal("expected a merge conflict error, got nil")

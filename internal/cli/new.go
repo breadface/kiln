@@ -81,20 +81,25 @@ func runNew(cmd *cobra.Command, opts newOptions) error {
 		return err
 	}
 
+	result, err := scaffold.Generate(scaffold.Options{Plugins: selected, Values: values})
+	if err != nil {
+		return err
+	}
+	manifestBytes, err := manifest.Marshal(buildProjectManifest(selected, values))
+	if err != nil {
+		return err
+	}
+	result.Files[manifest.FileName] = scaffold.GeneratedFile{Content: manifestBytes}
+
 	projectDir := filepath.Join(opts.OutDir, appName)
 	if _, err := os.Stat(projectDir); err == nil && !opts.Force {
 		return fmt.Errorf("%s already exists (use --force to overwrite)", projectDir)
 	}
 
-	if err := scaffold.Generate(scaffold.Options{
-		Plugins: selected,
-		Values:  values,
-		OutDir:  projectDir,
-	}); err != nil {
+	if err := scaffold.WriteToDisk(result, projectDir); err != nil {
 		return err
 	}
-
-	if err := writeProjectManifest(projectDir, selected, values); err != nil {
+	if err := scaffold.RunHooks(selected, projectDir, values); err != nil {
 		return err
 	}
 
@@ -305,7 +310,7 @@ func ghcrOwnerFromModule(modulePath string) string {
 	return ""
 }
 
-func writeProjectManifest(projectDir string, selected []*plugin.Plugin, values scaffold.Values) error {
+func buildProjectManifest(selected []*plugin.Plugin, values scaffold.Values) manifest.Project {
 	records := make([]manifest.PluginRecord, len(selected))
 	for i, p := range selected {
 		records[i] = manifest.PluginRecord{
@@ -315,11 +320,11 @@ func writeProjectManifest(projectDir string, selected []*plugin.Plugin, values s
 			Source:  p.Source,
 		}
 	}
-	return manifest.Write(projectDir, manifest.Project{
+	return manifest.Project{
 		KilnVersion: Version,
 		GeneratedAt: time.Now().UTC(),
 		Module:      values["MODULE_PATH"],
 		Plugins:     records,
 		Values:      values,
-	})
+	}
 }
