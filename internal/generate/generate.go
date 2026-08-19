@@ -232,6 +232,16 @@ func ResolveValues(selected []*plugin.Plugin, req Request, appName string) (scaf
 	if len(missing) > 0 {
 		return nil, &MissingValuesError{Missing: missing}
 	}
+
+	// Kotlin package path segments for the mobile plugin, e.g.
+	// "com.example.demoapp" -> "com/example/demoapp" — used to build
+	// commonMain/kotlin/{{MOBILE_PACKAGE_PATH}}/App.kt-style paths.
+	// Computed only when MOBILE_PACKAGE actually resolved above (i.e. the
+	// mobile plugin was selected) — a no-op otherwise.
+	if pkg, ok := values["MOBILE_PACKAGE"]; ok {
+		values["MOBILE_PACKAGE_PATH"] = strings.ReplaceAll(pkg, ".", "/")
+	}
+
 	return values, nil
 }
 

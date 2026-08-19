@@ -171,6 +171,33 @@ func TestSelectPluginsExplicitMobileOptIn(t *testing.T) {
 	}
 }
 
+func TestResolveValuesMobilePackagePath(t *testing.T) {
+	selected := []*plugin.Plugin{{
+		Manifest: plugin.Manifest{
+			Name: "kmp-compose", Kind: plugin.KindMobile,
+			Placeholders: []plugin.Placeholder{{Name: "MOBILE_PACKAGE", Required: true}},
+		},
+	}}
+
+	values, err := ResolveValues(selected, Request{MobilePackage: "com.example.demoapp"}, "demoapp")
+	if err != nil {
+		t.Fatalf("ResolveValues: %v", err)
+	}
+	if values["MOBILE_PACKAGE_PATH"] != "com/example/demoapp" {
+		t.Errorf("MOBILE_PACKAGE_PATH = %q, want %q", values["MOBILE_PACKAGE_PATH"], "com/example/demoapp")
+	}
+}
+
+func TestResolveValuesMobilePackagePathAbsentWithoutMobile(t *testing.T) {
+	values, err := ResolveValues(nil, Request{}, "demoapp")
+	if err != nil {
+		t.Fatalf("ResolveValues: %v", err)
+	}
+	if _, ok := values["MOBILE_PACKAGE_PATH"]; ok {
+		t.Error("MOBILE_PACKAGE_PATH should not be present for a project without the mobile plugin selected")
+	}
+}
+
 func TestValidateRequiresConflicts(t *testing.T) {
 	backend := &plugin.Plugin{Manifest: plugin.Manifest{Name: "go-api", Kind: plugin.KindBackend}}
 	needsBackend := &plugin.Plugin{Manifest: plugin.Manifest{
