@@ -34,6 +34,24 @@ executable:                       # glob patterns (relative to files/) to chmod 
   - "*.sh"
 ```
 
+### Kind selection: auto-select vs. opt-in
+
+`backend` and `hosting` are the only kinds `kiln new` auto-selects when
+exactly one plugin exists for them — nearly every project wants one of each.
+Every other kind (`frontend`, `mobile`, `payments`, `glue`) is **opt-in
+only**, resolved solely via an explicit flag (e.g. `--mobile kmp-compose`)
+or `--set`, even if it's the only plugin of that kind available. Don't add a
+new kind to the auto-select list without a real reason — the point is that
+`kiln new` never silently adds something a project didn't ask for.
+
+### Registering a new plugin
+
+A new plugin isn't discoverable until it's also added to the `//go:embed`
+directive in `plugins/embed.go` (e.g. `//go:embed backend hosting mobile`)
+— that directive lists top-level kind directories explicitly, not a
+wildcard. Forgetting this is a common first mistake: the plugin builds fine,
+`go:embed` just silently doesn't include it.
+
 ## Files
 
 Everything under `files/` is copied into the generated project. Both file
@@ -63,7 +81,10 @@ generated project needs can't appear literally under `files/`:
   directory containing its own `go.mod` as a separate module boundary and
   silently drops everything under it. Naming them `*.tmpl` sidesteps both.
   The `.tmpl` suffix is stripped on copy — `main.go.tmpl` becomes `main.go`
-  in the generated project.
+  in the generated project. **This is specific to Go source** — a `.kt`,
+  `.swift`, `.gradle.kts`, or any other non-Go file never needs `.tmpl`,
+  since none of it confuses the kiln repo's own Go tooling (confirmed
+  directly: `mobile/kmp-compose`'s files/ tree has zero `.tmpl` files).
 - **Dot-prefixed files are excluded from `go:embed` by default** (e.g.
   `.env.example`). Prefix the segment with **`dot__`** in `files/` instead —
   `files/dot__env.example` is copied out as `.env.example`, and
@@ -73,6 +94,11 @@ generated project needs can't appear literally under `files/`:
 Both escapes are stripped per path segment, after placeholder rendering, by
 the same mechanism that renders `{{APP_NAME}}` in paths — a plugin author
 doesn't need to do anything beyond naming the file correctly in `files/`.
+Binary files (a real `gradle-wrapper.jar`, an image) can be committed and
+embedded directly — placeholder substitution is a regex over raw bytes, and
+`{{[A-Z0-9_]+}}` essentially never occurs by chance in real binary content;
+`mobile/kmp-compose` ships a real Gradle wrapper jar this way, verified
+byte-identical after the generate round trip in its e2e test.
 
 ## Fragments
 

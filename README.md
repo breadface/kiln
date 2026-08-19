@@ -26,6 +26,23 @@ myapp/
 └── kiln.yaml                 # records what generated this project
 ```
 
+Add a mobile client (opt-in — `mobile` is never auto-selected, see
+[plugins/README.md](plugins/README.md)) with `--mobile`:
+
+```sh
+kiln new myapp \
+  --module github.com/you/myapp-api \
+  --domain myapp.example.com \
+  --admin-email you@example.com \
+  --mobile kmp-compose \
+  --mobile-package com.example.myapp
+```
+
+That adds `myapp-mobile/`: a Kotlin Multiplatform + Compose Multiplatform
+client (a single `composeApp` module plus a thin `iosApp` Xcode wrapper) that
+calls the generated API's real `GET /api/hello` over plain Ktor REST — no
+gRPC, no auth, nothing fake.
+
 ## Install
 
 ```sh
@@ -34,11 +51,11 @@ go install github.com/breadface/kiln/cmd/kiln@latest
 
 ## Status
 
-Early. Kiln currently ships two plugins: `backend/go-api` and
-`hosting/docker-swarm-hetzner`, composed together by `kiln new`. More
-languages, frontends, mobile targets, and payment providers are additive —
-see [plugins/README.md](plugins/README.md) for the plugin format and
-[CONTRIBUTING.md](CONTRIBUTING.md) for how to add one.
+Early. Kiln currently ships three plugins: `backend/go-api`,
+`hosting/docker-swarm-hetzner`, and `mobile/kmp-compose`, composed together
+by `kiln new`. More backend languages, frontends, and payment providers are
+additive — see [plugins/README.md](plugins/README.md) for the plugin format
+and [CONTRIBUTING.md](CONTRIBUTING.md) for how to add one.
 
 ## How it works
 

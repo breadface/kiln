@@ -36,6 +36,25 @@ by hand — `docker compose config` (and, for the hosting plugin,
 `docker compose -f docker-compose.yml -f docker-compose.swarm.yml config`)
 catches Compose schema and merge mistakes that a Go test won't.
 
+For the mobile plugin specifically, the Go test suite only checks structural
+things (no leftover placeholders, the right directory layout, the
+`gradle-wrapper.jar` round trip) — it doesn't invoke Gradle, Xcode, or an
+Android SDK. After changing `plugins/mobile/kmp-compose/`, regenerate a
+project with `--mobile kmp-compose --mobile-package com.example.demoapp`
+and, if you have the toolchain installed, verify by hand:
+
+```sh
+cd <generated>/demoapp-mobile
+./gradlew :composeApp:assembleDebug          # real Android debug build
+cd iosApp && xcodebuild -project iosApp.xcodeproj -scheme iosApp \
+  -sdk iphonesimulator -destination 'id=<a-simulator-udid>' build
+```
+
+`xcrun simctl list devices` prints simulator UDIDs. Both are real, working
+build invocations — this is how the plugin's initial content was verified,
+including catching a missing Xcode Run Script build phase that only a real
+`xcodebuild` run surfaces.
+
 ## Commit conventions
 
 Commits are atomic and scoped to one logical change — prefer several small,
