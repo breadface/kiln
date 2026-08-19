@@ -19,10 +19,10 @@ func fakeBackendPlugin() *plugin.Plugin {
 			PostCopy:            "hooks/post_copy.sh",
 		},
 		FS: fstest.MapFS{
-			"files/main.go":            &fstest.MapFile{Data: []byte("// {{APP_NAME}} entrypoint\n")},
-			"files/deploy-helper.sh":   &fstest.MapFile{Data: []byte("#!/bin/sh\necho ok\n")},
-			"files/go.mod.tmpl":        &fstest.MapFile{Data: []byte("module {{APP_NAME}}\n")},
-			"files/dot__env.example":   &fstest.MapFile{Data: []byte("PORT={{PORT}}\n")},
+			"files/main.go":          &fstest.MapFile{Data: []byte("// {{APP_NAME}} entrypoint\n")},
+			"files/deploy-helper.sh": &fstest.MapFile{Data: []byte("#!/bin/sh\necho ok\n")},
+			"files/go.mod.tmpl":      &fstest.MapFile{Data: []byte("module {{APP_NAME}}\n")},
+			"files/dot__env.example": &fstest.MapFile{Data: []byte("PORT={{PORT}}\n")},
 			"fragments/docker-compose.fragment.yml": &fstest.MapFile{
 				Data: []byte("services:\n  api:\n    image: {{APP_NAME}}-api\n"),
 			},

@@ -19,13 +19,15 @@ import (
 // Request is every value a caller (CLI flags/--set, or a web form) can
 // supply, independent of how it was collected.
 type Request struct {
-	ProjectName string
-	Backend     string
-	Hosting     string
-	ModulePath  string
-	Domain      string
-	AdminEmail  string
-	GHCROwner   string
+	ProjectName   string
+	Backend       string
+	Hosting       string
+	Mobile        string
+	ModulePath    string
+	Domain        string
+	AdminEmail    string
+	GHCROwner     string
+	MobilePackage string
 	// Set holds explicit placeholder overrides, keyed by placeholder name —
 	// the parsed form of the CLI's repeatable --set KEY=VALUE flag. Always
 	// wins over every other source.
@@ -44,17 +46,29 @@ func Slugify(name string) string {
 	return strings.Trim(s, "-")
 }
 
-// SelectPlugins resolves one plugin per Kind: an explicit Backend/Hosting
-// name if given, otherwise the sole available plugin of that kind,
-// otherwise (zero available) that kind is skipped. More than one available
-// plugin of a kind with no explicit selection is an error asking to
-// disambiguate — today's plugin set never hits that case (every kind has
-// at most one plugin), but the logic doesn't need to change once more
-// plugins exist.
+// autoSelectKinds get chosen automatically when exactly one plugin exists
+// for them — nearly every project wants a backend and a hosting setup.
+// Every other kind (frontend, mobile, payments, glue) is opt-in only, even
+// with just one plugin available: not every project wants, say, a mobile
+// client, so silently adding one on every `kiln new` would be a real
+// regression, not a convenience.
+var autoSelectKinds = map[plugin.Kind]bool{
+	plugin.KindBackend: true,
+	plugin.KindHosting: true,
+}
+
+// SelectPlugins resolves one plugin per Kind: an explicit name (from
+// Backend/Hosting/Mobile) if given, otherwise — for auto-select kinds only
+// — the sole available plugin of that kind, otherwise that kind is
+// skipped. More than one available plugin of a kind with no explicit
+// selection is an error asking to disambiguate — today's plugin set never
+// hits that case (every kind has at most one plugin), but the logic
+// doesn't need to change once more plugins exist.
 func SelectPlugins(loader plugin.Loader, req Request) ([]*plugin.Plugin, error) {
 	explicit := map[plugin.Kind]string{
 		plugin.KindBackend: req.Backend,
 		plugin.KindHosting: req.Hosting,
+		plugin.KindMobile:  req.Mobile,
 	}
 	kinds := []plugin.Kind{
 		plugin.KindBackend, plugin.KindFrontend, plugin.KindMobile,
@@ -69,6 +83,10 @@ func SelectPlugins(loader plugin.Loader, req Request) ([]*plugin.Plugin, error) 
 				return nil, err
 			}
 			selected = append(selected, p)
+			continue
+		}
+
+		if !autoSelectKinds[k] {
 			continue
 		}
 
@@ -161,10 +179,11 @@ func ResolveValues(selected []*plugin.Plugin, req Request, appName string) (scaf
 	}
 
 	named := map[string]string{
-		"MODULE_PATH": req.ModulePath,
-		"DOMAIN":      req.Domain,
-		"ADMIN_EMAIL": req.AdminEmail,
-		"GHCR_OWNER":  req.GHCROwner,
+		"MODULE_PATH":    req.ModulePath,
+		"DOMAIN":         req.Domain,
+		"ADMIN_EMAIL":    req.AdminEmail,
+		"GHCR_OWNER":     req.GHCROwner,
+		"MOBILE_PACKAGE": req.MobilePackage,
 	}
 	for k, v := range named {
 		if v != "" {

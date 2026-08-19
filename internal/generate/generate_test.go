@@ -98,6 +98,79 @@ func TestResolveValuesSetOverridesFillMissing(t *testing.T) {
 	}
 }
 
+// fakeLoader is a minimal in-memory plugin.Loader for testing SelectPlugins
+// without needing real embedded plugin content.
+type fakeLoader struct {
+	plugins []*plugin.Plugin
+}
+
+func (l *fakeLoader) Resolve(kind plugin.Kind, name string) (*plugin.Plugin, error) {
+	for _, p := range l.plugins {
+		if p.Manifest.Kind == kind && p.Manifest.Name == name {
+			return p, nil
+		}
+	}
+	return nil, errors.New("not found")
+}
+
+func (l *fakeLoader) List(kind plugin.Kind) ([]*plugin.Plugin, error) {
+	var out []*plugin.Plugin
+	for _, p := range l.plugins {
+		if p.Manifest.Kind == kind {
+			out = append(out, p)
+		}
+	}
+	return out, nil
+}
+
+func TestSelectPluginsAutoSelectsOnlyBackendAndHosting(t *testing.T) {
+	loader := &fakeLoader{plugins: []*plugin.Plugin{
+		{Manifest: plugin.Manifest{Name: "go-api", Kind: plugin.KindBackend}},
+		{Manifest: plugin.Manifest{Name: "docker-swarm-hetzner", Kind: plugin.KindHosting}},
+		{Manifest: plugin.Manifest{Name: "kmp-compose", Kind: plugin.KindMobile}},
+	}}
+
+	selected, err := SelectPlugins(loader, Request{})
+	if err != nil {
+		t.Fatalf("SelectPlugins: %v", err)
+	}
+
+	var gotKinds []plugin.Kind
+	for _, p := range selected {
+		gotKinds = append(gotKinds, p.Manifest.Kind)
+	}
+	for _, want := range []plugin.Kind{plugin.KindBackend, plugin.KindHosting} {
+		found := false
+		for _, k := range gotKinds {
+			if k == want {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("expected %s to be auto-selected, got kinds %v", want, gotKinds)
+		}
+	}
+	for _, k := range gotKinds {
+		if k == plugin.KindMobile {
+			t.Errorf("mobile should never be auto-selected even with exactly one plugin available, got kinds %v", gotKinds)
+		}
+	}
+}
+
+func TestSelectPluginsExplicitMobileOptIn(t *testing.T) {
+	loader := &fakeLoader{plugins: []*plugin.Plugin{
+		{Manifest: plugin.Manifest{Name: "kmp-compose", Kind: plugin.KindMobile}},
+	}}
+
+	selected, err := SelectPlugins(loader, Request{Mobile: "kmp-compose"})
+	if err != nil {
+		t.Fatalf("SelectPlugins: %v", err)
+	}
+	if len(selected) != 1 || selected[0].Manifest.Name != "kmp-compose" {
+		t.Errorf("selected = %+v, want just kmp-compose", selected)
+	}
+}
+
 func TestValidateRequiresConflicts(t *testing.T) {
 	backend := &plugin.Plugin{Manifest: plugin.Manifest{Name: "go-api", Kind: plugin.KindBackend}}
 	needsBackend := &plugin.Plugin{Manifest: plugin.Manifest{
@@ -119,4 +192,3 @@ func TestValidateRequiresConflicts(t *testing.T) {
 		t.Error("expected a conflicts error, got nil")
 	}
 }
-

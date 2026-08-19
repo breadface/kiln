@@ -18,17 +18,19 @@ import (
 )
 
 type newOptions struct {
-	ProjectName string
-	Backend     string
-	Hosting     string
-	ModulePath  string
-	Domain      string
-	AdminEmail  string
-	GHCROwner   string
-	OutDir      string
-	Set         []string
-	Yes         bool
-	Force       bool
+	ProjectName   string
+	Backend       string
+	Hosting       string
+	Mobile        string
+	ModulePath    string
+	Domain        string
+	AdminEmail    string
+	GHCROwner     string
+	MobilePackage string
+	OutDir        string
+	Set           []string
+	Yes           bool
+	Force         bool
 }
 
 func newNewCmd() *cobra.Command {
@@ -47,10 +49,12 @@ func newNewCmd() *cobra.Command {
 	f := cmd.Flags()
 	f.StringVar(&opts.Backend, "backend", "", "backend plugin to use (auto-selected if only one is available)")
 	f.StringVar(&opts.Hosting, "hosting", "", "hosting plugin to use (auto-selected if only one is available)")
+	f.StringVar(&opts.Mobile, "mobile", "", "mobile plugin to use (opt-in — omit to generate without a mobile client)")
 	f.StringVar(&opts.ModulePath, "module", "", "Go module path for the generated API")
 	f.StringVar(&opts.Domain, "domain", "", "primary domain the hosting plugin will serve")
 	f.StringVar(&opts.AdminEmail, "admin-email", "", "email Caddy uses for TLS certificate registration")
 	f.StringVar(&opts.GHCROwner, "ghcr-owner", "", "GHCR namespace to push images to (defaults to the module path's org)")
+	f.StringVar(&opts.MobilePackage, "mobile-package", "", "reverse-DNS package id for the mobile app, e.g. com.example.myapp")
 	f.StringVar(&opts.OutDir, "dir", ".", "parent directory to generate the project into")
 	f.StringArrayVar(&opts.Set, "set", nil, "set a placeholder value directly, KEY=VALUE (repeatable)")
 	f.BoolVar(&opts.Yes, "yes", false, "don't prompt; use flags/defaults, error if a required value is missing")
@@ -126,14 +130,16 @@ func requestFromOptions(opts newOptions) (generate.Request, error) {
 		set[strings.TrimSpace(k)] = strings.TrimSpace(v)
 	}
 	return generate.Request{
-		ProjectName: opts.ProjectName,
-		Backend:     opts.Backend,
-		Hosting:     opts.Hosting,
-		ModulePath:  opts.ModulePath,
-		Domain:      opts.Domain,
-		AdminEmail:  opts.AdminEmail,
-		GHCROwner:   opts.GHCROwner,
-		Set:         set,
+		ProjectName:   opts.ProjectName,
+		Backend:       opts.Backend,
+		Hosting:       opts.Hosting,
+		Mobile:        opts.Mobile,
+		ModulePath:    opts.ModulePath,
+		Domain:        opts.Domain,
+		AdminEmail:    opts.AdminEmail,
+		GHCROwner:     opts.GHCROwner,
+		MobilePackage: opts.MobilePackage,
+		Set:           set,
 	}, nil
 }
 
