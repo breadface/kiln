@@ -1,0 +1,33 @@
+name: kmp-compose
+kind: mobile
+version: 0.1.0
+description: >-
+  Minimal Kotlin Multiplatform + Compose Multiplatform mobile client: a
+  single composeApp module (the Android app itself, plus commonMain/iosMain
+  shared UI) and a thin iosApp Xcode wrapper. Calls the backend/go-api
+  plugin's real GET /api/hello over plain Ktor REST — no gRPC, no
+  WebSockets, no auth, no product flavors.
+
+placeholders:
+  - name: MOBILE_PACKAGE
+    description: >-
+      Reverse-DNS package identity, e.g. com.example.myapp — used as the
+      Android applicationId/namespace, the iOS bundle identifier, and the
+      Kotlin package directory structure all at once.
+    required: true
+  - name: PORT
+    description: >-
+      Port the local dev backend listens on — same placeholder name as
+      backend/go-api's own PORT, so when both plugins are selected they
+      resolve to one shared value automatically.
+    default: "8080"
+  - name: PROD_API_BASE_URL
+    description: >-
+      Base URL to call once shipped to production, e.g.
+      https://api.example.com (typically https://{{DOMAIN}} once a hosting
+      plugin is picked). Not wired to an automatic dev/prod switch in this
+      minimal starter — ships as an obvious "edit before release" default.
+    default: "https://api.example.com"
+
+executable:
+  - "*/gradlew"

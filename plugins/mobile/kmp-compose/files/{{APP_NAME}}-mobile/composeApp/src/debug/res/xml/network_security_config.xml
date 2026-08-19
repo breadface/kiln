@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Debug-only (src/debug, not src/main) — permits cleartext (non-TLS) traffic
+  so the app can dial the local dev backend over the emulator's 10.0.2.2
+  alias or a LAN IP. Never merged into release builds.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

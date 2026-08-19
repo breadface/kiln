@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Placeholder adaptive-icon foreground — a plain circle, no brand mark.
+     Replace with your own before shipping. 108dp canvas, 72dp safe zone
+     (18dp inset each side). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="
+          M 54,27
+          A 27,27 0 0 1 81,54
+          A 27,27 0 0 1 54,81
+          A 27,27 0 0 1 27,54
+          A 27,27 0 0 1 54,27 Z"/>
+
+</vector>
