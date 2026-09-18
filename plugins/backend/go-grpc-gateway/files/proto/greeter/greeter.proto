@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package greeter.v1;
+
+import "google/api/annotations.proto";
+
+option go_package = "proto/pb/greeter;greeterv1";
+
+// Greeter is a minimal example service — replace it with your own API.
+service Greeter {
+  // Greet returns a greeting for the given name.
+  rpc Greet(GreetRequest) returns (GreetResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/greet/{name}"
+    };
+  }
+}
+
+message GreetRequest {
+  string name = 1;
+}
+
+message GreetResponse {
+  string message = 1;
+}

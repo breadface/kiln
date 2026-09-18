@@ -1,0 +1,71 @@
+// Command {{APP_NAME}}-api is the gRPC + REST gateway API entrypoint.
+package main
+
+import (
+	"context"
+	"flag"
+	"log"
+	"net"
+	"net/http"
+
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+
+	"{{MODULE_PATH}}/config"
+	"{{MODULE_PATH}}/db"
+	greeterv1 "{{MODULE_PATH}}/proto/pb/greeter"
+	"{{MODULE_PATH}}/server"
+)
+
+func main() {
+	migrate := flag.Bool("migrate", false, "run database migrations and exit")
+	flag.Parse()
+
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("loading config: %v", err)
+	}
+
+	conn, err := db.Connect(cfg.DatabaseURL)
+	if err != nil {
+		log.Fatalf("connecting to database: %v", err)
+	}
+
+	if *migrate {
+		if err := db.Migrate(conn); err != nil {
+			log.Fatalf("migrating: %v", err)
+		}
+		log.Println("migrations complete")
+		return
+	}
+
+	grpcServer := grpc.NewServer()
+	greeterv1.RegisterGreeterServer(grpcServer, server.NewGreeterServer(conn))
+
+	grpcLis, err := net.Listen("tcp", ":"+cfg.GRPCPort)
+	if err != nil {
+		log.Fatalf("listening on grpc port: %v", err)
+	}
+	go func() {
+		log.Printf("grpc listening on :%s (internal)", cfg.GRPCPort)
+		if err := grpcServer.Serve(grpcLis); err != nil {
+			log.Fatalf("grpc server error: %v", err)
+		}
+	}()
+
+	gwConn, err := grpc.NewClient("localhost:"+cfg.GRPCPort, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Fatalf("dialing grpc server: %v", err)
+	}
+
+	gwmux := runtime.NewServeMux()
+	if err := greeterv1.RegisterGreeterHandler(context.Background(), gwmux, gwConn); err != nil {
+		log.Fatalf("registering gateway handler: %v", err)
+	}
+
+	log.Printf("gateway listening on :%s", cfg.Port)
+	if err := http.ListenAndServe(":"+cfg.Port, server.WrapGateway(gwmux, cfg.CORSOrigins)); err != nil {
+		log.Fatalf("gateway server error: %v", err)
+	}
+}

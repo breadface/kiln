@@ -17,6 +17,7 @@ To try generation by hand:
 
 ```sh
 go run ./cmd/kiln new demoapp \
+  --backend go-api \
   --module github.com/you/demoapp-api \
   --domain demo.example.com \
   --admin-email you@example.com \
@@ -40,8 +41,9 @@ For the mobile plugin specifically, the Go test suite only checks structural
 things (no leftover placeholders, the right directory layout, the
 `gradle-wrapper.jar` round trip) — it doesn't invoke Gradle, Xcode, or an
 Android SDK. After changing `plugins/mobile/kmp-compose/`, regenerate a
-project with `--mobile kmp-compose --mobile-package com.example.demoapp`
-and, if you have the toolchain installed, verify by hand:
+project with `--backend go-api --mobile kmp-compose --mobile-package
+com.example.demoapp` and, if you have the toolchain installed, verify by
+hand:
 
 ```sh
 cd <generated>/demoapp-mobile

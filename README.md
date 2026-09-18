@@ -6,6 +6,7 @@ of copy-pasting boilerplate between projects and letting it drift.
 
 ```sh
 kiln new myapp \
+  --backend go-api \
   --module github.com/you/myapp-api \
   --domain myapp.example.com \
   --admin-email you@example.com
@@ -13,7 +14,11 @@ kiln new myapp \
 
 That generates a working project: a minimal Go HTTP API (stdlib routing,
 Postgres via gorm, env-based config) and a self-hosted deploy setup (GitHub
-Actions → GHCR → Docker Swarm behind Caddy, with automatic TLS).
+Actions → GHCR → Docker Swarm behind Caddy, with automatic TLS). `--backend`
+is required once more than one backend plugin exists (see Status below) —
+`go-api` is the plain REST option; `go-grpc-gateway` scaffolds the same app
+proto-first instead, with buf generating Go stubs a real `grpc.Server`
+implements, fronted by a grpc-gateway REST proxy.
 
 ```
 myapp/
@@ -31,6 +36,7 @@ Add a mobile client (opt-in — `mobile` is never auto-selected, see
 
 ```sh
 kiln new myapp \
+  --backend go-api \
   --module github.com/you/myapp-api \
   --domain myapp.example.com \
   --admin-email you@example.com \
@@ -51,11 +57,12 @@ go install github.com/breadface/kiln/cmd/kiln@latest
 
 ## Status
 
-Early. Kiln currently ships three plugins: `backend/go-api`,
-`hosting/docker-swarm-hetzner`, and `mobile/kmp-compose`, composed together
-by `kiln new`. More backend languages, frontends, and payment providers are
-additive — see [plugins/README.md](plugins/README.md) for the plugin format
-and [CONTRIBUTING.md](CONTRIBUTING.md) for how to add one.
+Early. Kiln currently ships four plugins: `backend/go-api`,
+`backend/go-grpc-gateway`, `hosting/docker-swarm-hetzner`, and
+`mobile/kmp-compose`, composed together by `kiln new`. More backend
+languages, frontends, and payment providers are additive — see
+[plugins/README.md](plugins/README.md) for the plugin format and
+[CONTRIBUTING.md](CONTRIBUTING.md) for how to add one.
 
 ## How it works
 
