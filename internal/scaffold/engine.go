@@ -98,9 +98,19 @@ func Generate(opts Options) (Result, error) {
 	}
 	delete(textFragments, "go.work")
 
-	// Every other text fragment target (e.g. Caddyfile) merges into a base
-	// file some plugin already copied into place via files/.
+	// Every other text fragment target (e.g. Caddyfile, buf.gen.yaml)
+	// merges into a base file some plugin already copied into place via
+	// files/. Unlike Caddyfile — which always has an owner in practice
+	// (hosting ships both the base and its own fragment together) — a
+	// target like buf.gen.yaml is genuinely optional: it only exists when
+	// a proto-aware plugin (e.g. backend/go-grpc-gateway) was selected, so
+	// a fragment aimed at it from an unrelated plugin (e.g. mobile picked
+	// without that backend) is simply not applicable and is skipped rather
+	// than treated as an error.
 	for base, frags := range textFragments {
+		if _, ok := result.Files[base]; !ok {
+			continue
+		}
 		if err := mergeIntoBase(result.Files, base, frags); err != nil {
 			return Result{}, err
 		}

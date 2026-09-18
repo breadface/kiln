@@ -120,6 +120,43 @@ frontend → mobile → payments → hosting → glue), not alphabetically, so
 generated files read top-to-bottom as "application services, then
 infrastructure."
 
+### The base-file-plus-fragment pattern, generically
+
+The mechanism above isn't specific to Caddy or Compose — it's the general
+way Kiln lets independent plugins extend a shared file without knowing
+about each other, and it's the pattern to reach for whenever a new plugin
+needs to contribute into something another plugin owns:
+
+1. One plugin ships the shared file under `files/` with a `# kiln:insert`
+   marker line where contributions go (see `hosting/docker-swarm-hetzner`'s
+   `files/Caddyfile`). That plugin is the base's owner — its own
+   contribution goes through the exact same fragment mechanism as anyone
+   else's, for symmetry (see `backend/go-grpc-gateway`'s `buf.gen.yaml`
+   below, which ships only the marker itself and gets 100% of its content,
+   including its own, from fragments).
+2. Any plugin — including the owner — drops a `fragments/<Base>.fragment`
+   file with just its own contribution. `MergeTextBlocks` inserts each
+   fragment at the marker, in `Kind` order, each preceded by a small
+   provenance comment.
+3. If a target is optional rather than always-present (unlike Caddyfile,
+   which always has an owner because hosting ships both the base and its
+   fragment together), a fragment aimed at a base file nothing shipped is
+   silently skipped, not an error — see `backend/go-grpc-gateway` +
+   `mobile/kmp-compose` below.
+
+**Worked example — `buf.gen.yaml` across languages:** `backend/go-grpc-gateway`
+owns `files/buf.gen.yaml` (just a `version`/`managed` shell plus the
+marker) and contributes its own Go/grpc/grpc-gateway plugin entries via
+`fragments/buf.gen.yaml.fragment`. `mobile/kmp-compose` contributes a
+second, independent `fragments/buf.gen.yaml.fragment` with Kotlin/Java
+entries targeting the exact same base file — neither plugin imports or
+references the other. Picking both merges both languages' entries into one
+`buf.gen.yaml`; picking `kmp-compose` without `go-grpc-gateway` means no
+plugin ever ships the base file, so `kmp-compose`'s fragment is skipped and
+no `buf.gen.yaml` is generated at all. Adding a third language's codegen
+later (e.g. a TypeScript frontend) means shipping one more
+`buf.gen.yaml.fragment` — no change to either existing plugin.
+
 ## Hooks
 
 `post_copy` scripts run via POSIX `sh` after every selected plugin's files

@@ -210,6 +210,34 @@ func TestGenerateGoWorkNeedsTwoModules(t *testing.T) {
 	}
 }
 
+// TestGenerateOptionalFragmentTargetSkippedWhenNoBase covers a text
+// fragment aimed at a base file (e.g. buf.gen.yaml) that no selected
+// plugin shipped — unlike Caddyfile, which always has an owner in
+// practice, a target like this is genuinely optional (only present when a
+// proto-aware backend is also selected) and must be silently skipped
+// rather than treated as an error.
+func TestGenerateOptionalFragmentTargetSkippedWhenNoBase(t *testing.T) {
+	orphan := &plugin.Plugin{
+		Manifest: plugin.Manifest{Name: "kmp-compose", Kind: plugin.KindMobile},
+		FS: fstest.MapFS{
+			"fragments/buf.gen.yaml.fragment": &fstest.MapFile{
+				Data: []byte("  - remote: buf.build/community/timostamm-protobuf-ts\n"),
+			},
+		},
+	}
+
+	result, err := Generate(Options{
+		Plugins: []*plugin.Plugin{fakeBackendPlugin(), orphan},
+		Values:  Values{"APP_NAME": "demoapp"},
+	})
+	if err != nil {
+		t.Fatalf("Generate: %v (an unmatched optional fragment should be skipped, not error)", err)
+	}
+	if _, ok := result.Files["buf.gen.yaml"]; ok {
+		t.Error("buf.gen.yaml should not be synthesized when no plugin shipped it as a base file")
+	}
+}
+
 func TestGenerateComposeConflict(t *testing.T) {
 	conflicting := &plugin.Plugin{
 		Manifest: plugin.Manifest{Name: "conflicting", Kind: plugin.KindGlue},

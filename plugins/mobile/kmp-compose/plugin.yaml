@@ -8,6 +8,12 @@ description: >-
   plugin's real GET /api/hello over plain Ktor REST — no gRPC, no
   WebSockets, no auth, no product flavors.
 
+  If backend/go-grpc-gateway is selected instead, this plugin also
+  contributes Kotlin/Java protobuf-lite stubs into that plugin's shared
+  buf.gen.yaml (see plugins/README.md's fragment mechanism) — generated
+  into this module's own generated/java directory, not yet wired into a
+  Gradle source set or consumed by composeApp's Ktor client.
+
 placeholders:
   - name: MOBILE_PACKAGE
     description: >-
