@@ -1,0 +1,5 @@
+echo "=== Running migrations: {{SERVICE_NAME}} ==="
+docker run --rm \
+  --env-file .env \
+  "ghcr.io/{{GHCR_OWNER}}/{{SERVICE_NAME}}:$IMAGE_TAG" \
+  {{COMMAND}}

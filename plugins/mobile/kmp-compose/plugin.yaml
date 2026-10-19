@@ -1,12 +1,18 @@
 name: kmp-compose
 kind: mobile
-version: 0.1.0
+version: 0.2.0
 description: >-
   Minimal Kotlin Multiplatform + Compose Multiplatform mobile client: a
   single composeApp module (the Android app itself, plus commonMain/iosMain
   shared UI) and a thin iosApp Xcode wrapper. Calls the backend/go-api
   plugin's real GET /api/hello over plain Ktor REST — no gRPC, no
   WebSockets, no auth, no product flavors.
+
+  If backend/go-grpc-gateway is selected instead, this plugin also
+  contributes Kotlin/Java protobuf-lite stubs into that plugin's shared
+  buf.gen.yaml (see plugins/README.md's fragment mechanism) — generated
+  into this module's own generated/java directory, not yet wired into a
+  Gradle source set or consumed by composeApp's Ktor client.
 
 placeholders:
   - name: MOBILE_PACKAGE
@@ -15,12 +21,13 @@ placeholders:
       Android applicationId/namespace, the iOS bundle identifier, and the
       Kotlin package directory structure all at once.
     required: true
-  - name: PORT
-    description: >-
-      Port the local dev backend listens on — same placeholder name as
-      backend/go-api's own PORT, so when both plugins are selected they
-      resolve to one shared value automatically.
-    default: "8080"
+    flag: mobile-package
+  - name: MOBILE_PACKAGE_PATH
+    description: MOBILE_PACKAGE as a directory path, e.g. com/example/myapp
+    derive:
+      from: MOBILE_PACKAGE
+      replace:
+        ".": "/"
   - name: PROD_API_BASE_URL
     description: >-
       Base URL to call once shipped to production, e.g.
@@ -28,6 +35,15 @@ placeholders:
       plugin is picked). Not wired to an automatic dev/prod switch in this
       minimal starter — ships as an obvious "edit before release" default.
     default: "https://api.example.com"
+
+# The one backend service this client talks to. Its fields are exported as
+# API_<FIELD> placeholders (e.g. {{API_PORT}} in ApiClient.kt), so this
+# plugin works with any backend that provides http-service@1.
+consumes:
+  - contract: http-service@1
+    min: 1
+    max: 1
+    as: API
 
 executable:
   - "*/gradlew"

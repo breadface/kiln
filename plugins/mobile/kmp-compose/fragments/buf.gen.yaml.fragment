@@ -1,0 +1,8 @@
+  - remote: buf.build/protocolbuffers/java
+    out: {{APP_NAME}}-mobile/generated/java
+    opt:
+      - lite
+  - remote: buf.build/grpc/java
+    out: {{APP_NAME}}-mobile/generated/java
+    opt:
+      - lite

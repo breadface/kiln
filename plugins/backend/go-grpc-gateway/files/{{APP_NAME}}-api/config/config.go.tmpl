@@ -1,0 +1,43 @@
+// Package config loads runtime configuration from the environment.
+package config
+
+import (
+	"log"
+
+	"github.com/caarlos0/env/v11"
+
+	"{{MODULE_PATH}}/dotenv"
+)
+
+// Config holds all runtime configuration. See .env.example for the full
+// list of variables it reads.
+type Config struct {
+	// Port is the public REST gateway port.
+	Port string `env:"PORT" envDefault:"{{PORT}}"`
+	// GRPCPort is the internal gRPC listener the gateway dials in process —
+	// never exposed outside the container/host.
+	GRPCPort    string `env:"GRPC_PORT" envDefault:"{{GRPC_PORT}}"`
+	DatabaseURL string `env:"DATABASE_URL,required"`
+	JWTSecret   string `env:"JWT_SECRET" envDefault:"change-me-in-production"`
+	CORSOrigins string `env:"CORS_ORIGINS" envDefault:"*"`
+}
+
+// Load reads .env (if present) and then parses environment variables into a
+// Config. Real environment variables always take priority over .env, so
+// .env is safe to commit as a local-dev default without risking it override
+// real deployment secrets.
+func Load() (Config, error) {
+	if err := dotenv.Load(".env", "../.env"); err != nil {
+		return Config{}, err
+	}
+
+	var cfg Config
+	if err := env.Parse(&cfg); err != nil {
+		return Config{}, err
+	}
+
+	if cfg.JWTSecret == "change-me-in-production" {
+		log.Println("warning: JWT_SECRET is using the insecure default — set it before deploying")
+	}
+	return cfg, nil
+}

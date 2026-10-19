@@ -6,7 +6,8 @@ A Kiln plugin is a directory containing:
 <kind>/<name>/
   plugin.yaml     # manifest — see below
   files/          # copied into the generated project, after rendering
-  fragments/      # contributions to shared root files (see "Fragments")
+  fragments/      # contributions to shared files other plugins own (see "Fragments")
+  bindings/       # fragments rendered once per contract provider (see "Contracts")
 ```
 
 ## `plugin.yaml`
@@ -14,7 +15,7 @@ A Kiln plugin is a directory containing:
 ```yaml
 name: go-api
 kind: backend          # backend | frontend | mobile | payments | hosting | glue
-version: 0.1.0
+version: 0.2.0
 description: Minimal Go HTTP API starter (net/http, Postgres+gorm, env config)
 
 requires: []            # "kind" or "kind/name" refs this plugin needs selected
@@ -24,15 +25,53 @@ placeholders:
   - name: MODULE_PATH
     description: Go module path for the generated API
     required: true
-  - name: PORT
-    description: HTTP port the API listens on
-    default: "8080"
+    flag: module               # exposed as `kiln new --module`
+  - name: SERVICE_NAME
+    description: Service name
+    default: "{{APP_NAME}}-api" # defaults may reference other placeholders
+  - name: GHCR_OWNER
+    required: true
+    derive:                    # computed from another value when not set
+      from: MODULE_PATH
+      match: '^github\.com/([^/]+)/'
+      template: "$1"
+
+provides:                      # contracts this plugin implements — see "Contracts"
+  - contract: http-service@1
+    with:
+      SERVICE_NAME: "{{SERVICE_NAME}}"
+      PORT: "{{PORT}}"
+      BUILD_CONTEXT: "{{APP_NAME}}-api"
+consumes: []                   # contracts this plugin works with — see "Contracts"
+
+next_steps:                    # printed after generation, rendered
+  - cd {{APP_NAME}}-api && make run
 
 post_copy: hooks/post_copy.sh   # optional, run after all files are copied + merged
 contributes_go_module: true      # this plugin ships its own go.mod at project root
 executable:                       # glob patterns (relative to files/) to chmod +x after copy
   - "*.sh"
 ```
+
+### Values
+
+Kiln itself defines exactly one value, `APP_NAME` (the slugified project
+name). Every other value is a placeholder some plugin declares, resolved in
+this order:
+
+1. an explicit value — a plugin-declared `flag:` (e.g. `--module`) or
+   `--set KEY=VALUE`, which wins over the flag;
+2. `derive:` — either `match` + `template` (a regexp over another value,
+   expanded with its capture groups; no match leaves it unset) or `replace`
+   (literal substring replacements, e.g. `{".": "/"}` turns
+   `com.example.app` into `com/example/app`);
+3. `default:` — which may reference other placeholders and resolves once
+   they're known.
+
+Anything `required` and still unset is prompted for (or reported, with
+`--yes`). Two plugins can declare the same placeholder — they then share one
+value — but that's for genuinely shared concepts; to use another plugin's
+values, consume a contract instead (see below).
 
 ### Kind selection: auto-select vs. opt-in
 
@@ -100,25 +139,132 @@ embedded directly — placeholder substitution is a regex over raw bytes, and
 `mobile/kmp-compose` ships a real Gradle wrapper jar this way, verified
 byte-identical after the generate round trip in its e2e test.
 
+## Contracts
+
+A contract is the interface between plugins: a schema of named fields in
+[`contracts/`](../contracts/README.md), versioned by major number (e.g.
+`http-service@1`). Plugins never reference each other by name; one
+**provides** a contract by filling in its fields, another **consumes** it
+and is generated against whatever providers were selected.
+
+```yaml
+# backend/go-api
+provides:
+  - contract: http-service@1
+    with: { SERVICE_NAME: "{{SERVICE_NAME}}", PORT: "{{PORT}}", BUILD_CONTEXT: "{{APP_NAME}}-api" }
+  - contract: env@1
+    with: { ENV_NAME: DATABASE_URL }
+
+# hosting/docker-swarm-hetzner
+consumes:
+  - contract: http-service@1
+    min: 1              # error unless at least one selected plugin provides it
+  - contract: env@1     # min defaults to 0, max to unlimited
+
+# mobile/kmp-compose
+consumes:
+  - contract: http-service@1
+    min: 1
+    max: 1
+    as: API             # exports the provider's fields as {{API_PORT}}, {{API_SERVICE_NAME}}, …
+```
+
+Every `provides` entry is validated against its schema — required fields
+present, no unknown fields, values fully resolved — whether or not anything
+consumes it. A plugin can provide the same contract several times (one
+`env@1` per variable).
+
+A consumer uses its bindings in two ways:
+
+- **`bindings/<contract-name>/`** holds fragments (same naming as
+  `fragments/`, below) rendered **once per bound provider**, with that
+  provider's contract fields layered over the global values. This is how a
+  hosting plugin builds, deploys and routes to N services without any
+  template logic: its `bindings/http-service/Caddyfile@routes.fragment` is
+  rendered for each service. A plugin that adds a service or a secret —
+  say, a payments provider — just provides `http-service@1` / `env@1`, and
+  hosting picks it up with no change (see
+  `internal/cli/contracts_test.go`).
+- **`as:`** (requires `max: 1`) exports the single provider's fields as
+  global placeholders, for use anywhere in the consumer's `files/`.
+
 ## Fragments
 
-Some files — `docker-compose.yml`, `Caddyfile`, `go.work` — are contributed to
-by more than one plugin at once (e.g. a backend plugin's API service and a
-hosting plugin's Caddy service both belong in the same `docker-compose.yml`).
-Plugins don't own these files directly; they contribute a fragment instead:
+Some files are contributed to by more than one plugin at once (e.g. a
+backend plugin's API service and a hosting plugin's Caddy service both
+belong in the same `docker-compose.yml`). Plugins don't own these files
+directly; they contribute a fragment instead:
 
 - `fragments/docker-compose.fragment.yml` — a YAML document merged into the
   final `docker-compose.yml`. It's fine for two plugins to declare the exact
   same key with the same value; it's an error for them to declare the same
   key with different values.
-- `fragments/Caddyfile.fragment`, `fragments/go.work.fragment` — plain text,
-  concatenated into the base file (owned by whichever plugin ships it as
-  `files/Caddyfile` etc.) at a `# kiln:insert` marker line.
+- `fragments/<path>.fragment` — plain text, inserted into the base file at
+  `<path>` (relative to the project root) at its unnamed marker line.
+  `<path>` goes through the same rendering and filename escapes as `files/`,
+  so `fragments/dot__github/workflows/deploy.yml@build.fragment` targets
+  `.github/workflows/deploy.yml`.
+- `fragments/<path>@<slot>.fragment` — the same, at the marker for a named
+  slot.
 
-Fragments from multiple plugins are applied in `Kind` order (backend →
-frontend → mobile → payments → hosting → glue), not alphabetically, so
+A marker is a line comment (`#`, `//`, `--` or `;`) reading
+`kiln:insert` with an optional slot name:
+
+```yaml
+jobs:
+  build:
+    steps:
+      - uses: actions/checkout@v4
+      # kiln:insert build
+```
+
+Each inserted fragment is prefixed with the marker's indentation — write
+fragments unindented — and preceded by a provenance comment in the
+marker's own comment syntax. Markers are removed from the output once
+every fragment is merged, so a slot nobody contributed to just disappears.
+
+Fragments are applied in `Kind` order (backend → frontend → mobile →
+payments → hosting → glue), then binding fragments in the same order, so
 generated files read top-to-bottom as "application services, then
 infrastructure."
+
+### The base-file-plus-fragment pattern, generically
+
+The mechanism above isn't specific to Caddy or Compose — it's the general
+way Kiln lets independent plugins extend a shared file without knowing
+about each other, and it's the pattern to reach for whenever a new plugin
+needs to contribute into something another plugin owns:
+
+1. One plugin ships the shared file under `files/` with marker lines where
+   contributions go (see `hosting/docker-swarm-hetzner`'s
+   `files/.github/workflows/deploy.yml`, which has `build`, `env`, `pull`,
+   `migrate` and `verify` slots). That plugin is the base's owner — its own
+   contribution goes through the exact same fragment mechanism as anyone
+   else's, for symmetry (see `backend/go-grpc-gateway`'s `buf.gen.yaml`
+   below, which ships only the marker itself and gets 100% of its content,
+   including its own, from fragments).
+2. Any plugin — including the owner — drops a fragment file with just its
+   own contribution.
+3. A fragment aimed at a base file nothing shipped is silently skipped, not
+   an error — the target is optional (see `backend/go-grpc-gateway` +
+   `mobile/kmp-compose` below).
+
+**Worked example — `buf.gen.yaml` across languages:** `backend/go-grpc-gateway`
+owns `files/buf.gen.yaml` (just a `version`/`managed` shell plus the
+marker) and contributes its own Go/grpc/grpc-gateway plugin entries via
+`fragments/buf.gen.yaml.fragment`. `mobile/kmp-compose` contributes a
+second, independent `fragments/buf.gen.yaml.fragment` with Kotlin/Java
+entries targeting the exact same base file — neither plugin imports or
+references the other. Picking both merges both languages' entries into one
+`buf.gen.yaml`; picking `kmp-compose` without `go-grpc-gateway` means no
+plugin ever ships the base file, so `kmp-compose`'s fragment is skipped and
+no `buf.gen.yaml` is generated at all. Adding a third language's codegen
+later (e.g. a TypeScript frontend) means shipping one more
+`buf.gen.yaml.fragment` — no change to either existing plugin.
+
+Use fragments when the base file belongs to a *specific* plugin and you're
+adding to it once. Use contracts when a plugin needs to repeat something
+for *every* provider of a concept, whoever they are.
 
 ## Hooks
 

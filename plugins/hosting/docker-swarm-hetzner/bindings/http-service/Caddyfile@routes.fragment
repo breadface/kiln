@@ -1,4 +1,4 @@
-{{DOMAIN}} {
+handle {{PATH_PREFIX}}* {
 	reverse_proxy {{SERVICE_NAME}}:{{PORT}} {
 		header_up X-Forwarded-For {remote_host}
 	}

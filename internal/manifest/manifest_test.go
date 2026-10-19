@@ -12,10 +12,12 @@ func TestWriteReadRoundTrip(t *testing.T) {
 	want := Project{
 		KilnVersion: "0.1.0",
 		GeneratedAt: time.Date(2026, 8, 17, 12, 0, 0, 0, time.UTC),
-		Module:      "github.com/damilolao328/demoapp-api",
 		Plugins: []PluginRecord{
 			{Kind: "backend", Name: "go-api", Version: "0.1.0", Source: "embedded"},
 			{Kind: "hosting", Name: "docker-swarm-hetzner", Version: "0.1.0", Source: "embedded"},
+		},
+		Bindings: []BindingRecord{
+			{Contract: "http-service@1", Consumer: "hosting/docker-swarm-hetzner", Provider: "backend/go-api", Values: map[string]string{"PORT": "8080"}},
 		},
 		Values: map[string]string{"APP_NAME": "demoapp", "DOMAIN": "demo.example.com"},
 	}

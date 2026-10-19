@@ -13,6 +13,22 @@ type Plugin struct {
 	Source string
 }
 
+// Ref returns the plugin's "kind/name" reference.
+func (p *Plugin) Ref() string {
+	return string(p.Manifest.Kind) + "/" + p.Manifest.Name
+}
+
+// Binding connects a plugin consuming a contract to one selected plugin
+// providing it. Values holds the provider's contract fields, validated
+// against the contract schema and rendered with the resolved placeholder
+// values — they're what the consumer's bindings/<contract>/ fragments see.
+type Binding struct {
+	Contract string
+	Consumer *Plugin
+	Provider *Plugin
+	Values   map[string]string
+}
+
 // Loader resolves plugins by kind and name. EmbedLoader is the only
 // implementation today; a future git-backed loader (resolving plugins
 // through a remote index) can implement the same interface without any

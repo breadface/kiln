@@ -1,0 +1,25 @@
+name: http-service
+version: 1
+description: >-
+  A long-running service that serves HTTP on one port and can be built
+  from source into a container image. Hosting plugins consume it to
+  build, deploy, and route traffic to each service.
+fields:
+  - name: SERVICE_NAME
+    description: Unique service name, used as its container, image, and internal DNS name.
+    required: true
+  - name: PORT
+    description: Port the service listens on inside its container.
+    required: true
+  - name: BUILD_CONTEXT
+    description: Directory, relative to the project root, the image is built from.
+    required: true
+  - name: DOCKERFILE
+    description: Dockerfile path, relative to BUILD_CONTEXT.
+    default: Dockerfile
+  - name: PATH_PREFIX
+    description: Public URL path prefix routed to this service, always starting and ending with "/".
+    default: /
+  - name: HEALTH_PATH
+    description: HTTP path that returns 2xx once the service is healthy, empty if it has none.
+    default: ""

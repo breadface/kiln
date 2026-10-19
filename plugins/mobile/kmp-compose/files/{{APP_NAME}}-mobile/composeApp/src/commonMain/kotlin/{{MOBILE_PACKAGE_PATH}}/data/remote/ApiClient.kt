@@ -20,10 +20,10 @@ import kotlinx.serialization.json.Json
 private const val DEV_LAN_IP = "192.168.1.100"
 
 val DEV_API_HOSTS = listOf(
-    "http://10.0.2.2:{{PORT}}",
-    "http://localhost:{{PORT}}",
-    "http://127.0.0.1:{{PORT}}",
-    "http://$DEV_LAN_IP:{{PORT}}",
+    "http://10.0.2.2:{{API_PORT}}",
+    "http://localhost:{{API_PORT}}",
+    "http://127.0.0.1:{{API_PORT}}",
+    "http://$DEV_LAN_IP:{{API_PORT}}",
 )
 
 // Not wired to an automatic dev/prod switch in this minimal starter (no

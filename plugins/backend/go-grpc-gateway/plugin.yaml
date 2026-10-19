@@ -1,0 +1,60 @@
+name: go-grpc-gateway
+kind: backend
+version: 0.2.0
+description: >-
+  Go API starter built proto-first: buf/protoc generate Go stubs from
+  proto/, a real grpc.Server implements them, and grpc-gateway's ServeMux
+  proxies REST/JSON to it over a single exposed port. Same Postgres+gorm,
+  env config, and Connect/Migrate split as backend/go-api, but every
+  request goes through gRPC rather than hand-rolled net/http routing. The
+  buf.gen.yaml this plugin ships has a marker other language plugins can
+  extend (see plugins/README.md) — kmp-compose targets it for its own
+  Kotlin stubs.
+
+placeholders:
+  - name: MODULE_PATH
+    description: "Go module path for the generated API, e.g. github.com/you/myapp-api"
+    required: true
+    flag: module
+  - name: SERVICE_NAME
+    description: Service name — its container, image, and internal DNS name
+    default: "{{APP_NAME}}-api"
+  - name: PORT
+    description: Public HTTP port the REST gateway listens on
+    default: "8080"
+  - name: GRPC_PORT
+    description: >-
+      Internal gRPC port the gateway dials in process — never exposed
+      outside the container/host
+    default: "9090"
+
+provides:
+  - contract: http-service@1
+    with:
+      SERVICE_NAME: "{{SERVICE_NAME}}"
+      PORT: "{{PORT}}"
+      BUILD_CONTEXT: "{{APP_NAME}}-api"
+      HEALTH_PATH: /api/health
+  - contract: migration@1
+    with:
+      SERVICE_NAME: "{{SERVICE_NAME}}"
+      COMMAND: ./api-server -migrate
+  - contract: env@1
+    with:
+      ENV_NAME: DATABASE_URL
+      ENV_DESCRIPTION: Postgres connection string
+  - contract: env@1
+    with:
+      ENV_NAME: JWT_SECRET
+      ENV_DESCRIPTION: Secret used to sign auth tokens
+  - contract: env@1
+    with:
+      ENV_NAME: CORS_ORIGINS
+      ENV_DESCRIPTION: Comma-separated allowed CORS origins
+
+next_steps:
+  - cp {{APP_NAME}}-api/.env.example {{APP_NAME}}-api/.env
+  - cd {{APP_NAME}}-api && make run
+
+post_copy: hooks/post_copy.sh
+contributes_go_module: true

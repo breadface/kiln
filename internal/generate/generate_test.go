@@ -22,34 +22,77 @@ func TestSlugify(t *testing.T) {
 	}
 }
 
-func TestGhcrOwnerFromModule(t *testing.T) {
-	cases := map[string]string{
-		"github.com/damilolao328/demoapp-api": "damilolao328",
-		"gitlab.com/someone/demoapp-api":      "",
-		"":                                    "",
-	}
-	for in, want := range cases {
-		if got := ghcrOwnerFromModule(in); got != want {
-			t.Errorf("ghcrOwnerFromModule(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
-
-func TestResolveValuesDerivedNames(t *testing.T) {
+func TestResolveValuesOnlyAppNameIsBuiltIn(t *testing.T) {
 	values, err := ResolveValues(nil, Request{}, "demoapp")
 	if err != nil {
 		t.Fatalf("ResolveValues: %v", err)
 	}
+	if len(values) != 1 || values["APP_NAME"] != "demoapp" {
+		t.Errorf("values = %v, want only APP_NAME — every other value belongs to a plugin", values)
+	}
+}
+
+// TestResolveValuesDefaultsAndDerive covers the manifest-driven value
+// rules that replaced Kiln's old hardcoded ones: a default referencing
+// another placeholder, a regexp derive, a replace derive, and a chain
+// that only resolves across multiple passes (declared out of order).
+func TestResolveValuesDefaultsAndDerive(t *testing.T) {
+	selected := []*plugin.Plugin{
+		{Manifest: plugin.Manifest{Name: "hosting", Kind: plugin.KindHosting, Placeholders: []plugin.Placeholder{
+			{Name: "IMAGE", Default: "{{OWNER}}/{{SERVICE_NAME}}"},
+			{Name: "OWNER", Required: true, Derive: &plugin.Derive{
+				From: "MODULE_PATH", Match: `^github\.com/([^/]+)/`, Template: "$1",
+			}},
+		}}},
+		{Manifest: plugin.Manifest{Name: "api", Kind: plugin.KindBackend, Placeholders: []plugin.Placeholder{
+			{Name: "SERVICE_NAME", Default: "{{APP_NAME}}-api"},
+			{Name: "MODULE_PATH", Required: true},
+		}}},
+		{Manifest: plugin.Manifest{Name: "mobile", Kind: plugin.KindMobile, Placeholders: []plugin.Placeholder{
+			{Name: "PKG", Required: true},
+			{Name: "PKG_PATH", Derive: &plugin.Derive{From: "PKG", Replace: map[string]string{".": "/"}}},
+		}}},
+	}
+
+	values, err := ResolveValues(selected, Request{Set: map[string]string{
+		"MODULE_PATH": "github.com/you/demoapp-api",
+		"PKG":         "com.example.demoapp",
+	}}, "demoapp")
+	if err != nil {
+		t.Fatalf("ResolveValues: %v", err)
+	}
 	want := map[string]string{
-		"APP_NAME":           "demoapp",
-		"SERVICE_NAME":       "demoapp-api",
-		"SERVICE_NAME_UPPER": "DEMOAPP_API",
-		"STACK_NAME":         "demoapp",
+		"SERVICE_NAME": "demoapp-api",
+		"OWNER":        "you",
+		"IMAGE":        "you/demoapp-api",
+		"PKG_PATH":     "com/example/demoapp",
 	}
 	for k, v := range want {
 		if values[k] != v {
 			t.Errorf("values[%q] = %q, want %q", k, values[k], v)
 		}
+	}
+
+	// A derive that doesn't match leaves a required value missing rather
+	// than inventing one.
+	_, err = ResolveValues(selected, Request{Set: map[string]string{
+		"MODULE_PATH": "gitlab.com/you/demoapp-api",
+		"PKG":         "com.example.demoapp",
+	}}, "demoapp")
+	var missingErr *MissingValuesError
+	if !errors.As(err, &missingErr) || len(missingErr.Missing) != 1 || missingErr.Missing[0].Name != "OWNER" {
+		t.Errorf("err = %v, want OWNER reported missing", err)
+	}
+
+	// An explicit value always beats a derive or default.
+	values, err = ResolveValues(selected, Request{Set: map[string]string{
+		"MODULE_PATH": "github.com/you/demoapp-api", "PKG": "a.b", "OWNER": "org", "SERVICE_NAME": "core",
+	}}, "demoapp")
+	if err != nil {
+		t.Fatalf("ResolveValues: %v", err)
+	}
+	if values["IMAGE"] != "org/core" {
+		t.Errorf("IMAGE = %q, want explicit values to win", values["IMAGE"])
 	}
 }
 
@@ -92,9 +135,6 @@ func TestResolveValuesSetOverridesFillMissing(t *testing.T) {
 	}
 	if values["MODULE_PATH"] != "github.com/you/demoapp-api" {
 		t.Errorf("MODULE_PATH = %q, want the --set override", values["MODULE_PATH"])
-	}
-	if values["GHCR_OWNER"] != "you" {
-		t.Errorf("GHCR_OWNER = %q, want derived from MODULE_PATH's org segment", values["GHCR_OWNER"])
 	}
 }
 
@@ -162,7 +202,7 @@ func TestSelectPluginsExplicitMobileOptIn(t *testing.T) {
 		{Manifest: plugin.Manifest{Name: "kmp-compose", Kind: plugin.KindMobile}},
 	}}
 
-	selected, err := SelectPlugins(loader, Request{Mobile: "kmp-compose"})
+	selected, err := SelectPlugins(loader, Request{Plugins: map[plugin.Kind]string{plugin.KindMobile: "kmp-compose"}})
 	if err != nil {
 		t.Fatalf("SelectPlugins: %v", err)
 	}
@@ -171,30 +211,9 @@ func TestSelectPluginsExplicitMobileOptIn(t *testing.T) {
 	}
 }
 
-func TestResolveValuesMobilePackagePath(t *testing.T) {
-	selected := []*plugin.Plugin{{
-		Manifest: plugin.Manifest{
-			Name: "kmp-compose", Kind: plugin.KindMobile,
-			Placeholders: []plugin.Placeholder{{Name: "MOBILE_PACKAGE", Required: true}},
-		},
-	}}
-
-	values, err := ResolveValues(selected, Request{MobilePackage: "com.example.demoapp"}, "demoapp")
-	if err != nil {
-		t.Fatalf("ResolveValues: %v", err)
-	}
-	if values["MOBILE_PACKAGE_PATH"] != "com/example/demoapp" {
-		t.Errorf("MOBILE_PACKAGE_PATH = %q, want %q", values["MOBILE_PACKAGE_PATH"], "com/example/demoapp")
-	}
-}
-
-func TestResolveValuesMobilePackagePathAbsentWithoutMobile(t *testing.T) {
-	values, err := ResolveValues(nil, Request{}, "demoapp")
-	if err != nil {
-		t.Fatalf("ResolveValues: %v", err)
-	}
-	if _, ok := values["MOBILE_PACKAGE_PATH"]; ok {
-		t.Error("MOBILE_PACKAGE_PATH should not be present for a project without the mobile plugin selected")
+func TestSelectPluginsRejectsUnknownKind(t *testing.T) {
+	if _, err := SelectPlugins(&fakeLoader{}, Request{Plugins: map[plugin.Kind]string{"database": "postgres"}}); err == nil {
+		t.Fatal("expected an error selecting a plugin of an unknown kind")
 	}
 }
 

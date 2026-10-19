@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -32,6 +33,7 @@ func TestNewEndToEnd(t *testing.T) {
 	root.SetOut(buf)
 	root.SetArgs([]string{
 		"new", "e2eapp",
+		"--backend", "go-api",
 		"--module", "github.com/example/e2eapp-api",
 		"--domain", "e2eapp.example.com",
 		"--admin-email", "admin@example.com",
@@ -93,6 +95,94 @@ func TestNewEndToEnd(t *testing.T) {
 	}
 }
 
+// TestNewEndToEndGRPCGateway is TestNewEndToEnd's counterpart for
+// backend/go-grpc-gateway: proto/buf.yaml/buf.gen.yaml land at the project
+// root (not inside the app directory — see plugins/README.md), the
+// buf.gen.yaml marker got replaced with this plugin's own Go/grpc/gateway
+// plugin entries, and the generated module builds using the pre-generated
+// stubs committed into the plugin (no buf/network access needed here).
+func TestNewEndToEndGRPCGateway(t *testing.T) {
+	if testing.Short() {
+		t.Skip("shells out to go build/go mod tidy over the network; skipped with -short")
+	}
+
+	dir := t.TempDir()
+	root := newRootCmd()
+	buf := &bytes.Buffer{}
+	root.SetOut(buf)
+	root.SetArgs([]string{
+		"new", "e2eapp",
+		"--backend", "go-grpc-gateway",
+		"--module", "github.com/example/e2eapp-api",
+		"--domain", "e2eapp.example.com",
+		"--admin-email", "admin@example.com",
+		"--dir", dir,
+		"--yes",
+	})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("kiln new: %v\noutput:\n%s", err, buf.String())
+	}
+
+	projectDir := filepath.Join(dir, "e2eapp")
+
+	err := filepath.Walk(projectDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return err
+		}
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if scaffold.HasUnresolved(content) {
+			t.Errorf("%s still contains an unresolved {{PLACEHOLDER}}", path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walking generated project: %v", err)
+	}
+
+	for _, want := range []string{"buf.yaml", "buf.gen.yaml", filepath.Join("proto", "greeter", "greeter.proto")} {
+		if _, err := os.Stat(filepath.Join(projectDir, want)); err != nil {
+			t.Errorf("expected root-level %s: %v", want, err)
+		}
+	}
+
+	genYAML, err := os.ReadFile(filepath.Join(projectDir, "buf.gen.yaml"))
+	if err != nil {
+		t.Fatalf("reading buf.gen.yaml: %v", err)
+	}
+	if !strings.Contains(string(genYAML), "buf.build/protocolbuffers/go") {
+		t.Error("buf.gen.yaml should contain go-grpc-gateway's fragment-contributed Go plugin entries")
+	}
+	if strings.Contains(string(genYAML), "kiln:insert") {
+		t.Error("buf.gen.yaml still contains the unmerged fragment marker")
+	}
+
+	compose, err := os.ReadFile(filepath.Join(projectDir, "docker-compose.yml"))
+	if err != nil {
+		t.Fatalf("reading docker-compose.yml: %v", err)
+	}
+	var doc map[string]any
+	if err := yaml.Unmarshal(compose, &doc); err != nil {
+		t.Fatalf("docker-compose.yml is not valid YAML: %v", err)
+	}
+	services, _ := doc["services"].(map[string]any)
+	for _, want := range []string{"e2eapp-api", "caddy"} {
+		if _, ok := services[want]; !ok {
+			t.Errorf("docker-compose.yml missing services.%s", want)
+		}
+	}
+
+	apiDir := filepath.Join(projectDir, "e2eapp-api")
+	cmd := exec.Command("go", "build", "./...")
+	cmd.Dir = apiDir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("generated module failed to build: %v\n%s", err, out)
+	}
+}
+
 // TestNewEndToEndMobile is TestNewEndToEnd's mobile-plugin counterpart. It
 // doesn't shell out to any Kotlin/Gradle/Xcode toolchain (that's a manual,
 // best-effort check — see CONTRIBUTING.md) — it verifies the structural
@@ -108,6 +198,7 @@ func TestNewEndToEndMobile(t *testing.T) {
 	root.SetOut(buf)
 	root.SetArgs([]string{
 		"new", "e2eapp",
+		"--backend", "go-api",
 		"--module", "github.com/example/e2eapp-api",
 		"--domain", "e2eapp.example.com",
 		"--admin-email", "admin@example.com",
@@ -178,6 +269,7 @@ func TestNewWithoutMobileFlagHasNoMobileDir(t *testing.T) {
 	root.SetOut(&bytes.Buffer{})
 	root.SetArgs([]string{
 		"new", "e2eapp",
+		"--backend", "go-api",
 		"--module", "github.com/example/e2eapp-api",
 		"--domain", "e2eapp.example.com",
 		"--admin-email", "admin@example.com",

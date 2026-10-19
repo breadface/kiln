@@ -26,7 +26,12 @@ type Options struct {
 	// checked) by the caller, in Kind order — Generate applies them in the
 	// order given, which determines fragment-merge order.
 	Plugins []*plugin.Plugin
-	Values  Values
+	// Bindings are the resolved contract bindings between Plugins (see
+	// generate.ResolveBindings). Each one renders the consumer's
+	// bindings/<contract>/ fragments once, with the provider's contract
+	// fields layered over Values.
+	Bindings []plugin.Binding
+	Values   Values
 }
 
 // GeneratedFile is one file Generate produced.
@@ -43,6 +48,28 @@ type Result struct {
 	Files map[string]GeneratedFile
 }
 
+// textTarget identifies where a text fragment goes: a base file path,
+// relative to the project root, and a named marker slot within it.
+type textTarget struct {
+	Path string
+	Slot string
+}
+
+// fragmentSet accumulates every fragment contributed to a project, in the
+// order they were contributed.
+type fragmentSet struct {
+	compose [][]byte
+	text    map[textTarget][]fragment.NamedFragment
+	order   []textTarget
+}
+
+func (fs *fragmentSet) addText(t textTarget, f fragment.NamedFragment) {
+	if _, seen := fs.text[t]; !seen {
+		fs.order = append(fs.order, t)
+	}
+	fs.text[t] = append(fs.text[t], f)
+}
+
 // Generate copies, renders, and merges every selected plugin's contribution
 // into an in-memory Result. It does no I/O — not writing files, not running
 // post_copy hooks, not touching disk at all — so it can run anywhere Go can
@@ -50,9 +77,7 @@ type Result struct {
 // real project on disk call WriteToDisk and then RunHooks.
 func Generate(opts Options) (Result, error) {
 	result := Result{Files: map[string]GeneratedFile{}}
-
-	var composeFragments [][]byte
-	textFragments := map[string][]fragment.NamedFragment{}
+	frags := &fragmentSet{text: map[textTarget][]fragment.NamedFragment{}}
 	goModuleCount := 0
 
 	for _, p := range opts.Plugins {
@@ -60,25 +85,30 @@ func Generate(opts Options) (Result, error) {
 			goModuleCount++
 		}
 		if err := copyPluginFiles(p, result.Files, opts.Values); err != nil {
-			return Result{}, fmt.Errorf("plugin %s: %w", pluginRef(p), err)
+			return Result{}, fmt.Errorf("plugin %s: %w", p.Ref(), err)
 		}
-		compose, text, err := collectFragments(p, opts.Values)
-		if err != nil {
-			return Result{}, fmt.Errorf("plugin %s: %w", pluginRef(p), err)
-		}
-		if compose != nil {
-			composeFragments = append(composeFragments, compose)
-		}
-		for base, content := range text {
-			textFragments[base] = append(textFragments[base], fragment.NamedFragment{
-				PluginRef: pluginRef(p),
-				Content:   content,
-			})
+		if err := collectFragments(p.FS, "fragments", p.Ref(), opts.Values, frags); err != nil {
+			return Result{}, fmt.Errorf("plugin %s: %w", p.Ref(), err)
 		}
 	}
 
-	if len(composeFragments) > 0 {
-		merged, err := fragment.MergeCompose(composeFragments)
+	for _, b := range opts.Bindings {
+		values := Values{}
+		for k, v := range opts.Values {
+			values[k] = v
+		}
+		for k, v := range b.Values {
+			values[k] = v
+		}
+		root := path.Join("bindings", plugin.ContractName(b.Contract))
+		label := fmt.Sprintf("%s for %s (%s)", b.Consumer.Ref(), b.Provider.Ref(), b.Contract)
+		if err := collectFragments(b.Consumer.FS, root, label, values, frags); err != nil {
+			return Result{}, fmt.Errorf("plugin %s: %w", b.Consumer.Ref(), err)
+		}
+	}
+
+	if len(frags.compose) > 0 {
+		merged, err := fragment.MergeCompose(frags.compose)
 		if err != nil {
 			return Result{}, fmt.Errorf("merging docker-compose fragments: %w", err)
 		}
@@ -87,23 +117,33 @@ func Generate(opts Options) (Result, error) {
 	}
 
 	// go.work only makes sense once 2+ selected plugins each bring their own
-	// Go module — a single module has nothing to work across. The mechanism
-	// is built and tested even though it never fires for the current
-	// backend+hosting plugin set.
-	if frags, ok := textFragments["go.work"]; ok && goModuleCount >= 2 {
+	// Go module — a single module has nothing to work across.
+	goWork := textTarget{Path: "go.work"}
+	if _, ok := frags.text[goWork]; ok && goModuleCount >= 2 {
 		result.Files["go.work"] = GeneratedFile{Content: []byte(GoWorkShell)}
-		if err := mergeIntoBase(result.Files, "go.work", frags); err != nil {
-			return Result{}, err
-		}
 	}
-	delete(textFragments, "go.work")
 
-	// Every other text fragment target (e.g. Caddyfile) merges into a base
-	// file some plugin already copied into place via files/.
-	for base, frags := range textFragments {
-		if err := mergeIntoBase(result.Files, base, frags); err != nil {
-			return Result{}, err
+	// Every text fragment merges into a base file some plugin already
+	// copied into place via files/. A target like buf.gen.yaml is
+	// genuinely optional — it only exists when a proto-aware plugin (e.g.
+	// backend/go-grpc-gateway) was selected — so a fragment aimed at a
+	// base nothing shipped is skipped rather than treated as an error.
+	for _, t := range frags.order {
+		base, ok := result.Files[t.Path]
+		if !ok {
+			continue
 		}
+		merged, err := fragment.MergeTextBlocks(base.Content, t.Slot, frags.text[t])
+		if err != nil {
+			return Result{}, fmt.Errorf("merging fragments into %s: %w", t.Path, err)
+		}
+		base.Content = merged
+		result.Files[t.Path] = base
+	}
+
+	for name, f := range result.Files {
+		f.Content = fragment.StripMarkers(f.Content)
+		result.Files[name] = f
 	}
 
 	return result, nil
@@ -141,7 +181,7 @@ func RunHooks(plugins []*plugin.Plugin, outDir string, values Values) error {
 			continue
 		}
 		if err := runPostCopy(p, outDir, values); err != nil {
-			return fmt.Errorf("plugin %s post_copy hook: %w", pluginRef(p), err)
+			return fmt.Errorf("plugin %s post_copy hook: %w", p.Ref(), err)
 		}
 	}
 	return nil
@@ -218,58 +258,55 @@ func transformPath(rel string, values Values) string {
 	return strings.Join(parts, "/")
 }
 
-// collectFragments reads and renders every file under the plugin's
-// fragments/ directory, sorting each into either the single Compose
-// fragment or a named text fragment keyed by the base file it targets
-// (e.g. "Caddyfile.fragment" -> "Caddyfile").
-func collectFragments(p *plugin.Plugin, values Values) (compose []byte, text map[string]string, err error) {
-	const root = "fragments"
-
-	entries, err := fs.ReadDir(p.FS, root)
-	if err != nil {
+// collectFragments reads and renders every fragment under root in fsys
+// (a plugin's fragments/, or one of its bindings/<contract>/ directories),
+// labelling each with label for provenance comments:
+//
+//   - docker-compose.fragment.yml at root is structurally merged into the
+//     project's docker-compose.yml.
+//   - <path>/<base>.fragment targets the unnamed marker in <path>/<base>,
+//     and <path>/<base>@<slot>.fragment targets the marker for <slot>.
+//     <path>/<base> goes through the same rendering and filename escapes
+//     as files/ (see transformPath), so dot__github/... targets .github/...
+func collectFragments(fsys fs.FS, root, label string, values Values, frags *fragmentSet) error {
+	if _, err := fs.Stat(fsys, root); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return nil, nil, nil
+			return nil
 		}
-		return nil, nil, fmt.Errorf("reading fragments dir: %w", err)
+		return fmt.Errorf("stat %s: %w", root, err)
 	}
 
-	text = map[string]string{}
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
+	return fs.WalkDir(fsys, root, func(fp string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
 		}
-		raw, err := fs.ReadFile(p.FS, path.Join(root, e.Name()))
+		rel := strings.TrimPrefix(fp, root+"/")
+		raw, err := fs.ReadFile(fsys, fp)
 		if err != nil {
-			return nil, nil, fmt.Errorf("reading fragment %s: %w", e.Name(), err)
+			return fmt.Errorf("reading fragment %s: %w", fp, err)
 		}
 		rendered := Render(raw, values)
 
-		switch {
-		case e.Name() == "docker-compose.fragment.yml":
-			compose = rendered
-		case strings.HasSuffix(e.Name(), ".fragment"):
-			base := strings.TrimSuffix(e.Name(), ".fragment")
-			text[base] = string(rendered)
-		default:
-			return nil, nil, fmt.Errorf(
-				"unrecognized fragment file %q (expected docker-compose.fragment.yml or <Base>.fragment)", e.Name())
+		if rel == "docker-compose.fragment.yml" {
+			frags.compose = append(frags.compose, rendered)
+			return nil
 		}
-	}
-	return compose, text, nil
-}
-
-func mergeIntoBase(files map[string]GeneratedFile, baseName string, frags []fragment.NamedFragment) error {
-	base, ok := files[baseName]
-	if !ok {
-		return fmt.Errorf("merging fragments into %s: expected a plugin to have copied it first", baseName)
-	}
-	merged, err := fragment.MergeTextBlocks(base.Content, fragment.DefaultMarker, frags)
-	if err != nil {
-		return fmt.Errorf("merging fragments into %s: %w", baseName, err)
-	}
-	base.Content = merged
-	files[baseName] = base
-	return nil
+		stem, ok := strings.CutSuffix(rel, ".fragment")
+		if !ok {
+			return fmt.Errorf(
+				"unrecognized fragment file %q (expected docker-compose.fragment.yml or <path>[@<slot>].fragment)", fp)
+		}
+		var slot string
+		if dir, file := path.Split(stem); strings.Contains(file, "@") {
+			i := strings.LastIndex(file, "@")
+			stem, slot = dir+file[:i], file[i+1:]
+		}
+		frags.addText(
+			textTarget{Path: transformPath(stem, values), Slot: slot},
+			fragment.NamedFragment{PluginRef: label, Content: string(rendered)},
+		)
+		return nil
+	})
 }
 
 func runPostCopy(p *plugin.Plugin, outDir string, values Values) error {
@@ -307,14 +344,10 @@ func runPostCopy(p *plugin.Plugin, outDir string, values Values) error {
 	return nil
 }
 
-func pluginRef(p *plugin.Plugin) string {
-	return string(p.Manifest.Kind) + "/" + p.Manifest.Name
-}
-
 func pluginRefs(plugins []*plugin.Plugin) string {
 	refs := make([]string, len(plugins))
 	for i, p := range plugins {
-		refs[i] = pluginRef(p)
+		refs[i] = p.Ref()
 	}
 	return strings.Join(refs, ", ")
 }

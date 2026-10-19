@@ -25,12 +25,20 @@ type PluginRecord struct {
 	Source string `yaml:"source"`
 }
 
+// BindingRecord records one contract binding between two plugins.
+type BindingRecord struct {
+	Contract string            `yaml:"contract"`
+	Consumer string            `yaml:"consumer"`
+	Provider string            `yaml:"provider"`
+	Values   map[string]string `yaml:"values,omitempty"`
+}
+
 // Project is the kiln.yaml contract.
 type Project struct {
 	KilnVersion string            `yaml:"kiln_version"`
 	GeneratedAt time.Time         `yaml:"generated_at"`
-	Module      string            `yaml:"module,omitempty"`
 	Plugins     []PluginRecord    `yaml:"plugins"`
+	Bindings    []BindingRecord   `yaml:"bindings,omitempty"`
 	Values      map[string]string `yaml:"values,omitempty"`
 }
 
