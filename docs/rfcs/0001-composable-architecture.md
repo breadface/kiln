@@ -1,6 +1,6 @@
 # RFC 0001: Kiln as a composer of independent plugins
 
-- Status: accepted; milestones 1–2 implemented
+- Status: accepted; milestones 1–3 implemented
 - Date: 2026-10-19
 
 ## Goal
@@ -68,7 +68,8 @@ closed list; selection is still one plugin per kind.
   diff of generated output; a reproducibility test checks every
   combination regenerates byte for byte from its own `kiln.yaml`.
 
-Finding: `post_copy` hooks break reproducibility. `go mod tidy` rewrites
+Finding (resolved for the bundled backends in milestone 3): `post_copy`
+hooks break reproducibility. `go mod tidy` rewrites
 `go.mod`/`go.sum` after rendering, with results that depend on the network
 at that moment, so `kiln.yaml`'s hashes describe Kiln's rendered output,
 not what's on disk. Before `kiln upgrade` (milestone 6) can treat "differs
@@ -76,17 +77,42 @@ from recorded hash" as "edited by the user", hooks must either become
 declarative steps whose output Kiln records, or have their effects hashed
 after they run.
 
-### 3. Split hosting into independent axes
+### 3. Split hosting into independent axes — done
 
-Today's `hosting/docker-swarm-hetzner` bundles CI, registry, packaging,
-runtime, edge proxy and machine provider. Each becomes its own kind,
-meeting at contracts: `packaging` (OCI image, buildpack, Nix, static
-binary), `runtime` (Swarm, Kubernetes, Fly, Cloud Run, systemd), `ci`
-(GitHub Actions, GitLab), `edge` (Caddy, Traefik, managed), `secrets`
-(platform secrets, SOPS, Doppler), and `layout` (monorepo, polyrepo):
-plugins emit units, the layout plugin decides where they live.
-`http-service@1`'s `BUILD_CONTEXT`/`DOCKERFILE` move to a packaging
-contract. Multiple plugins per kind are allowed where contracts permit.
+`hosting/docker-swarm-hetzner` became four kinds, each replaceable on its
+own, meeting only at contracts:
+
+| Kind | Plugin | Provides | Consumes |
+|---|---|---|---|
+| edge | `caddy` | `config-file@1` | `http-service@2` |
+| registry | `ghcr` | `image-registry@1` | — |
+| runtime | `docker-swarm` | `deploy-target@1`, `deploy-secret@1` | `oci-image@1`, `migration@1`, `config-file@1`, `image-registry@1` |
+| ci | `github-actions` | — | `oci-image@1`, `env@1`, `deploy-secret@1`, `deploy-target@1`, `image-registry@1` |
+
+`http-service@2` drops the build fields, which move to `oci-image@1`.
+Structured YAML fragments work for any path, and Markdown files can take
+`<!-- kiln:insert -->` slots.
+
+Splitting it surfaced, and fixed, two bugs in the old pipeline: the deploy
+ran on the server against files nothing ever copied there, and `docker
+stack deploy` never read `.env`, so the application's variables reached
+containers empty. `deploy.sh` now runs on the CI runner or a laptop and
+drives the server's Docker over SSH using the repository's files, and
+exports `.env` itself. A third: the backends resolved dependencies with
+`go mod tidy` at generation time, which had drifted past their
+Dockerfiles' Go versions, so neither generated image built. Backends now
+pin every dependency and ship `go.sum`, and have no hooks — generated
+projects are fully deterministic, and `kiln.yaml`'s hashes match the disk.
+
+`scripts/smoke/docker-swarm.sh` deploys a generated project for real, over
+SSH, to a disposable Docker-in-Docker swarm, and checks it — the seed of
+milestone 5's conformance kit.
+
+Deferred: a `packaging` kind (the backend ships its own Dockerfile, so
+there's no language-agnostic packager to split out until buildpacks or
+Nix arrive), `layout` (monorepo vs polyrepo), `secrets` (CI secrets are the
+only store today), and allowing several plugins of one kind. Old Swarm
+configs accumulate on the server, one per deploy.
 
 ### 4. Capabilities as runtime ports
 
