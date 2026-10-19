@@ -1,37 +1,55 @@
 Plugins
-  backend/go-grpc-gateway       0.2.0
-  mobile/kmp-compose            0.2.0
-  hosting/docker-swarm-hetzner  0.2.0
+  backend/go-grpc-gateway  0.3.0
+  mobile/kmp-compose       0.3.0
+  edge/caddy               0.1.0
+  registry/ghcr            0.1.0
+  runtime/docker-swarm     0.1.0
+  ci/github-actions        0.1.0
 
 Bindings
-  http-service@1  demo-api      backend/go-grpc-gateway -> mobile/kmp-compose
-  http-service@1  demo-api      backend/go-grpc-gateway -> hosting/docker-swarm-hetzner
-  migration@1     demo-api      backend/go-grpc-gateway -> hosting/docker-swarm-hetzner
-  env@1           DATABASE_URL  backend/go-grpc-gateway -> hosting/docker-swarm-hetzner
-  env@1           JWT_SECRET    backend/go-grpc-gateway -> hosting/docker-swarm-hetzner
-  env@1           CORS_ORIGINS  backend/go-grpc-gateway -> hosting/docker-swarm-hetzner
+  http-service@2    demo-api            backend/go-grpc-gateway -> mobile/kmp-compose
+  http-service@2    demo-api            backend/go-grpc-gateway -> edge/caddy
+  oci-image@1       demo-api            backend/go-grpc-gateway -> runtime/docker-swarm
+  migration@1       demo-api            backend/go-grpc-gateway -> runtime/docker-swarm
+  config-file@1     caddyfile           edge/caddy -> runtime/docker-swarm
+  image-registry@1  ghcr.io             registry/ghcr -> runtime/docker-swarm
+  oci-image@1       demo-api            backend/go-grpc-gateway -> ci/github-actions
+  env@1             DATABASE_URL        backend/go-grpc-gateway -> ci/github-actions
+  env@1             JWT_SECRET          backend/go-grpc-gateway -> ci/github-actions
+  env@1             CORS_ORIGINS        backend/go-grpc-gateway -> ci/github-actions
+  deploy-secret@1   DEPLOY_HOST         runtime/docker-swarm -> ci/github-actions
+  deploy-secret@1   DEPLOY_USER         runtime/docker-swarm -> ci/github-actions
+  deploy-secret@1   DEPLOY_SSH_KEY      runtime/docker-swarm -> ci/github-actions
+  deploy-secret@1   DEPLOY_KNOWN_HOSTS  runtime/docker-swarm -> ci/github-actions
+  deploy-target@1   ./deploy.sh         runtime/docker-swarm -> ci/github-actions
+  image-registry@1  ghcr.io             registry/ghcr -> ci/github-actions
 
 Values
-  ADMIN_EMAIL          admin@example.com
-  API_BUILD_CONTEXT    demo-api
-  API_DOCKERFILE       Dockerfile
-  API_HEALTH_PATH      /api/health
-  API_PATH_PREFIX      /
-  API_PORT             8080
-  API_SERVICE_NAME     demo-api
-  APP_NAME             demo
-  DOMAIN               demo.example.com
-  GHCR_OWNER           example
-  GRPC_PORT            9090
-  MOBILE_PACKAGE       com.example.demo
-  MOBILE_PACKAGE_PATH  com/example/demo
-  MODULE_PATH          github.com/example/demo-api
-  PORT                 8080
-  PROD_API_BASE_URL    https://api.example.com
-  SERVICE_NAME         demo-api
-  STACK_NAME           demo
+  ADMIN_EMAIL               admin@example.com
+  API_HEALTH_PATH           /api/health
+  API_PATH_PREFIX           /
+  API_PORT                  8080
+  API_SERVICE_NAME          demo-api
+  APP_NAME                  demo
+  DEPLOY_COMMAND            ./deploy.sh
+  DOMAIN                    demo.example.com
+  GHCR_OWNER                example
+  GHCR_USERNAME             example
+  GRPC_PORT                 9090
+  MOBILE_PACKAGE            com.example.demo
+  MOBILE_PACKAGE_PATH       com/example/demo
+  MODULE_PATH               github.com/example/demo-api
+  PORT                      8080
+  PROD_API_BASE_URL         https://api.example.com
+  REGISTRY_HOST             ghcr.io
+  REGISTRY_NAMESPACE        example
+  REGISTRY_PASSWORD_SECRET  GHCR_TOKEN
+  REGISTRY_USERNAME         example
+  SERVICE_NAME              demo-api
+  STACK_NAME                demo
 
-Files (57)
+Files (58)
+  .github/DEPLOY.md
   .github/workflows/deploy.yml
   Caddyfile
   buf.gen.yaml
@@ -91,8 +109,9 @@ Files (57)
   proto/greeter/greeter.proto
 
 Hashes
-  sha256:9b0a08de4343426d692966e82ee03c07e4d3d3d71eb2d29b2fd95702b295c09e  .github/workflows/deploy.yml
-  sha256:04e6bce9c7f140dff6f644ecfc797c989638b19e72be9d8487687695a39d913b  Caddyfile
+  sha256:699e3b6b1754cee1ad75bbf92f7843fb0d9dfb6341fa6587cce8e0deac212aa7  .github/DEPLOY.md
+  sha256:7f4546aa3c2b472f82f597e99a69465d6263e43c3eefda55fd6e0babeb8cace2  .github/workflows/deploy.yml
+  sha256:17e17be298d4258f00e04190185c63a3dc250574e9234910ddf802b8f850abcf  Caddyfile
   sha256:c4065c19eb5d6727df1e42e552df26e920c6db81355311db8810ea71be356b20  buf.gen.yaml
   sha256:68c60b5e3e4cec391a9a96736a357d7df6bd8f57a50b1468af0f836587a0ec16  buf.yaml
   sha256:c084223e489410c99b713909ead465663e196d74e541a0d95dd0d65c00a3b731  demo-api/.env.example
@@ -143,10 +162,49 @@ Hashes
   sha256:0fd49ba3c3585c709678e0046a821c3c60685ec7063720d30d3a3448be3a208b  demo-mobile/iosApp/iosApp/Preview Content/Preview Assets.xcassets/Contents.json
   sha256:01d47afe5d13eb9ec48d9e8987c7920e72f2fefa5b06ec525087025caa809386  demo-mobile/iosApp/iosApp/iOSApp.swift
   sha256:300495bda533ca77948b973aeb3a0cd310c4794dfaa2706ceb6329f0bfc70a86  demo-mobile/settings.gradle.kts
-  sha256:69672766372a4915e0582d9824cdf911f461ac6967c3095518c052169978753b  deploy.sh
-  sha256:e63d85e402410b6a290aad91ab344846a4a29c04f85d6f831d6937196ff498ae  docker-compose.swarm.yml
-  sha256:2ec2228a4d662d5212e106f4d1981065053dd3578f63dbfd3358f6bada3c61d8  docker-compose.yml
+  sha256:600f0fff7ae9992ab345c68e90eeb0e1ec87358994d6711be3a0dbccd80d1c6e  deploy.sh
+  sha256:9bb06d1883bd6bed5eac9b25654339f42ba93737f509ae46d7fdc56537d365c6  docker-compose.swarm.yml
+  sha256:00061275d555390a6b0d735cc4b67e668223690665cae6f4e0434b601b12431f  docker-compose.yml
   sha256:78f2f1a8ca87317041e2dc6ea5a1a19c256a7478d04f23b098a553f5b9512589  proto/greeter/greeter.proto
+
+==> .github/DEPLOY.md <==
+# Deploying demo
+
+The **Deploy** workflow (`.github/workflows/deploy.yml`) builds every image,
+pushes it to `ghcr.io/example`, writes the
+application's environment to `.env`, and runs `./deploy.sh`. Start it
+from the repository's **Actions** tab → **Deploy** → **Run workflow**.
+
+## Repository secrets
+
+Add these under **Settings → Secrets and variables → Actions**.
+
+### Image registry
+
+- `GHCR_TOKEN` — a token that can push and pull images on
+  `ghcr.io` as `example`.
+
+### Deploy
+
+<!-- --- ci/github-actions for runtime/docker-swarm (deploy-secret@1) --- -->
+- `DEPLOY_HOST` — Hostname or IP of the swarm manager.
+<!-- --- ci/github-actions for runtime/docker-swarm (deploy-secret@1) --- -->
+- `DEPLOY_USER` — SSH user on DEPLOY_HOST that can run docker. Optional; defaults to root.
+<!-- --- ci/github-actions for runtime/docker-swarm (deploy-secret@1) --- -->
+- `DEPLOY_SSH_KEY` — Private SSH key for DEPLOY_USER.
+<!-- --- ci/github-actions for runtime/docker-swarm (deploy-secret@1) --- -->
+- `DEPLOY_KNOWN_HOSTS` — DEPLOY_HOST's known_hosts line(s), from `ssh-keyscan DEPLOY_HOST`. Optional, but without it the host key is trusted on first use.
+
+### Application environment
+
+Written to `.env` on every deploy.
+
+<!-- --- ci/github-actions for backend/go-grpc-gateway (env@1) --- -->
+- `DATABASE_URL` — Postgres connection string
+<!-- --- ci/github-actions for backend/go-grpc-gateway (env@1) --- -->
+- `JWT_SECRET` — Secret used to sign auth tokens
+<!-- --- ci/github-actions for backend/go-grpc-gateway (env@1) --- -->
+- `CORS_ORIGINS` — Comma-separated allowed CORS origins
 
 ==> .github/workflows/deploy.yml <==
 name: Deploy
@@ -154,9 +212,10 @@ name: Deploy
 on:
   workflow_dispatch:
 
+# Never cancel a deploy halfway through; queue the next one instead.
 concurrency:
   group: deploy
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -169,10 +228,10 @@ jobs:
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: example
+          password: ${{ secrets.GHCR_TOKEN }}
 
-      # --- hosting/docker-swarm-hetzner for backend/go-grpc-gateway (http-service@1) ---
+      # --- ci/github-actions for backend/go-grpc-gateway (oci-image@1) ---
       - uses: docker/build-push-action@v5
         with:
           context: ./demo-api
@@ -188,81 +247,48 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: appleboy/ssh-action@v1.0.3
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
         with:
-          host: ${{ secrets.HETZNER_HOST }}
-          username: ${{ secrets.HETZNER_USER }}
-          key: ${{ secrets.HETZNER_SSH_KEY }}
-          script: |
-            set -euo pipefail
-            cd ~/demo
+          registry: ghcr.io
+          username: example
+          password: ${{ secrets.GHCR_TOKEN }}
 
-            cat > .env <<'ENVEOF'
-            # --- hosting/docker-swarm-hetzner for backend/go-grpc-gateway (env@1) ---
-            DATABASE_URL=${{ secrets.DATABASE_URL }}
-            # --- hosting/docker-swarm-hetzner for backend/go-grpc-gateway (env@1) ---
-            JWT_SECRET=${{ secrets.JWT_SECRET }}
-            # --- hosting/docker-swarm-hetzner for backend/go-grpc-gateway (env@1) ---
-            CORS_ORIGINS=${{ secrets.CORS_ORIGINS }}
-            ENVEOF
+      # Secrets arrive as environment variables, never pasted into the
+      # script, so their values can't break or inject into it.
+      - name: Write .env
+        env:
+          ENV_FILE: .env
+          # --- ci/github-actions for backend/go-grpc-gateway (env@1) ---
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          # --- ci/github-actions for backend/go-grpc-gateway (env@1) ---
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          # --- ci/github-actions for backend/go-grpc-gateway (env@1) ---
+          CORS_ORIGINS: ${{ secrets.CORS_ORIGINS }}
+        run: |
+          {
+            : # valid even when nothing provides env@1
+            # --- ci/github-actions for backend/go-grpc-gateway (env@1) ---
+            printf '%s=%s\n' DATABASE_URL "$DATABASE_URL"
+            # --- ci/github-actions for backend/go-grpc-gateway (env@1) ---
+            printf '%s=%s\n' JWT_SECRET "$JWT_SECRET"
+            # --- ci/github-actions for backend/go-grpc-gateway (env@1) ---
+            printf '%s=%s\n' CORS_ORIGINS "$CORS_ORIGINS"
+          } >"$ENV_FILE"
 
-            docker swarm init >/dev/null 2>&1 || true
-
-            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-
-            IMAGE_TAG="${{ github.sha }}"
-
-            docker config inspect "caddyfile_$IMAGE_TAG" >/dev/null 2>&1 || \
-              docker config create "caddyfile_$IMAGE_TAG" ./Caddyfile
-
-            # Pull with retry — GHCR can take a moment to propagate a
-            # freshly pushed image.
-            # --- hosting/docker-swarm-hetzner for backend/go-grpc-gateway (http-service@1) ---
-            for i in 1 2 3 4 5; do
-              docker pull "ghcr.io/example/demo-api:$IMAGE_TAG" && break
-              echo "pull attempt $i failed, retrying..."
-              sleep 5
-            done
-
-            # --- hosting/docker-swarm-hetzner for backend/go-grpc-gateway (migration@1) ---
-            echo "=== Running migrations: demo-api ==="
-            docker run --rm \
-              --env-file .env \
-              "ghcr.io/example/demo-api:$IMAGE_TAG" \
-              ./api-server -migrate
-
-            echo "=== Deploying stack ==="
-            for i in 1 2 3; do
-              IMAGE_TAG=$IMAGE_TAG docker stack deploy \
-                --with-registry-auth \
-                --prune \
-                -c docker-compose.yml \
-                -c docker-compose.swarm.yml \
-                demo && break
-              echo "stack deploy attempt $i failed, retrying..."
-              sleep 5
-            done
-
-            echo "=== Verifying rollout ==="
-            # --- hosting/docker-swarm-hetzner for backend/go-grpc-gateway (http-service@1) ---
-            service="demo_demo-api"
-            converged=""
-            for i in $(seq 1 20); do
-              states=$(docker service ps "$service" --filter "desired-state=running" --format '{{.CurrentState}}' 2>/dev/null || true)
-              if [ -n "$states" ] && ! echo "$states" | grep -qv '^Running'; then
-                converged=1
-                break
-              fi
-              sleep 3
-            done
-            if [ -z "$converged" ]; then
-              echo "rollout did not converge for $service in time" >&2
-              docker service ps "$service" || true
-              exit 1
-            fi
-            echo "rollout complete: $service"
-
-            docker image prune -f
+      - name: Deploy
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+          # --- ci/github-actions for runtime/docker-swarm (deploy-secret@1) ---
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          # --- ci/github-actions for runtime/docker-swarm (deploy-secret@1) ---
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          # --- ci/github-actions for runtime/docker-swarm (deploy-secret@1) ---
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          # --- ci/github-actions for runtime/docker-swarm (deploy-secret@1) ---
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: ./deploy.sh
 
 ==> Caddyfile <==
 {
@@ -272,7 +298,7 @@ jobs:
 }
 
 demo.example.com {
-	# --- hosting/docker-swarm-hetzner for backend/go-grpc-gateway (http-service@1) ---
+	# --- edge/caddy for backend/go-grpc-gateway (http-service@2) ---
 	handle /* {
 		reverse_proxy demo-api:8080 {
 			header_up X-Forwarded-For {remote_host}
@@ -309,107 +335,153 @@ plugins:
         - lite
 
 ==> deploy.sh <==
-#!/bin/bash
-# Manual escape hatch — use this on the server if you need to deploy
-# without going through GitHub Actions (e.g. a hotfix or CI is down).
+#!/usr/bin/env bash
+# Deploys this project as the Docker Swarm stack "demo". Runs
+# anywhere — CI or your machine — and talks to the swarm manager's Docker
+# over SSH using the files in this repository, so nothing needs copying to
+# the server first.
 #
-# Requires: GHCR_TOKEN env var, IMAGE_TAG env var (or defaults to latest)
+# Environment:
+#   DEPLOY_HOST         swarm manager hostname or IP (required unless DOCKER_HOST is set)
+#   DEPLOY_USER         SSH user there that can run docker (default: root)
+#   DEPLOY_SSH_KEY      private key to log in with (default: your SSH agent/config)
+#   DEPLOY_KNOWN_HOSTS  known_hosts line(s) for DEPLOY_HOST (default: trust on first use)
+#   IMAGE_TAG           image tag to deploy (default: latest). Use a unique tag per
+#                       deploy, e.g. a commit SHA — config files are versioned by it.
+#   DOCKER_HOST         set instead of DEPLOY_HOST to target any Docker daemon directly
+#
+# Also needed: a .env file here with the application's runtime variables
+# (NAME=value lines, values unquoted), and docker logged in to
+# ghcr.io, e.g.:
+#   echo "$GHCR_TOKEN" | docker login ghcr.io -u example --password-stdin
 #
 # Usage:
-#   IMAGE_TAG=abc1234 GHCR_TOKEN=ghp_xxx ./deploy.sh
+#   DEPLOY_HOST=203.0.113.10 IMAGE_TAG=abc1234 ./deploy.sh
 
 set -euo pipefail
+cd "$(dirname "$0")"
 
-IMAGE_TAG=${IMAGE_TAG:-latest}
-GITHUB_ACTOR=${GITHUB_ACTOR:-example}
+export IMAGE_TAG=${IMAGE_TAG:-latest}
 
-echo "=== Manual deploy: $IMAGE_TAG ==="
+if [ -z "${DOCKER_HOST:-}" ]; then
+	: "${DEPLOY_HOST:?set DEPLOY_HOST (or DOCKER_HOST)}"
+	if [ -n "${DEPLOY_SSH_KEY:-}" ]; then
+		eval "$(ssh-agent -s)" >/dev/null
+		trap 'ssh-agent -k >/dev/null' EXIT
+		printf '%s\n' "$DEPLOY_SSH_KEY" | ssh-add - >/dev/null 2>&1
+	fi
+	mkdir -p ~/.ssh && chmod 700 ~/.ssh
+	if [ -n "${DEPLOY_KNOWN_HOSTS:-}" ]; then
+		printf '%s\n' "$DEPLOY_KNOWN_HOSTS" >>~/.ssh/known_hosts
+	elif ! ssh-keygen -F "$DEPLOY_HOST" >/dev/null 2>&1; then
+		echo "warning: trusting $DEPLOY_HOST's SSH host key on first use; set DEPLOY_KNOWN_HOSTS to pin it" >&2
+		ssh-keyscan -H "$DEPLOY_HOST" >>~/.ssh/known_hosts 2>/dev/null
+	fi
+	export DOCKER_HOST="ssh://${DEPLOY_USER:-root}@$DEPLOY_HOST"
+fi
 
-echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+# Export .env for ${VAR} interpolation in the compose files: unlike
+# `docker compose`, `docker stack deploy` doesn't read .env itself. Lines
+# are taken literally (no shell evaluation), the same way --env-file does.
+if [ -f .env ]; then
+	while IFS= read -r line || [ -n "$line" ]; do
+		case "$line" in '' | '#'*) continue ;; esac
+		export "${line%%=*}=${line#*=}"
+	done <.env
+fi
 
-# Create versioned Caddyfile config (skip if already exists — same SHA = same content)
-docker config inspect "caddyfile_$IMAGE_TAG" >/dev/null 2>&1 || \
-	docker config create "caddyfile_$IMAGE_TAG" ./Caddyfile
+docker swarm init >/dev/null 2>&1 || true
 
-# --- hosting/docker-swarm-hetzner for backend/go-grpc-gateway (migration@1) ---
+# Pull with retry — a registry can take a moment to serve a freshly
+# pushed image.
+# --- runtime/docker-swarm for backend/go-grpc-gateway (oci-image@1) ---
+for i in 1 2 3 4 5; do
+	docker pull "ghcr.io/example/demo-api:$IMAGE_TAG" && break
+	if [ "$i" = 5 ]; then exit 1; fi
+	echo "pull attempt $i failed, retrying..."
+	sleep 5
+done
+
+# --- runtime/docker-swarm for backend/go-grpc-gateway (migration@1) ---
 echo "=== Running migrations: demo-api ==="
 docker run --rm \
 	--env-file .env \
 	"ghcr.io/example/demo-api:$IMAGE_TAG" \
 	./api-server -migrate
 
-echo "=== Deploying stack ==="
-IMAGE_TAG=$IMAGE_TAG docker stack deploy \
-	--with-registry-auth \
-	--prune \
-	-c docker-compose.yml \
-	-c docker-compose.swarm.yml \
-	demo
+echo "=== Deploying stack demo ($IMAGE_TAG) ==="
+for i in 1 2 3; do
+	docker stack deploy \
+		--with-registry-auth \
+		--prune \
+		-c docker-compose.yml \
+		-c docker-compose.swarm.yml \
+		demo && break
+	if [ "$i" = 3 ]; then exit 1; fi
+	echo "stack deploy attempt $i failed, retrying..."
+	sleep 5
+done
 
-docker image prune -f
+echo "=== Verifying rollout ==="
+# --- runtime/docker-swarm for backend/go-grpc-gateway (oci-image@1) ---
+service="demo_demo-api"
+converged=""
+for i in $(seq 1 20); do
+	states=$(docker service ps "$service" --filter "desired-state=running" --format '{{.CurrentState}}' 2>/dev/null || true)
+	if [ -n "$states" ] && ! echo "$states" | grep -qv '^Running'; then
+		converged=1
+		break
+	fi
+	sleep 3
+done
+if [ -z "$converged" ]; then
+	echo "rollout did not converge for $service in time" >&2
+	docker service ps "$service" || true
+	exit 1
+fi
+echo "rollout complete: $service"
+
+docker image prune -f >/dev/null
 echo "=== Done ==="
 
 ==> docker-compose.swarm.yml <==
-# Production overlay — merged on top of docker-compose.yml at deploy time:
-#   docker stack deploy -c docker-compose.yml -c docker-compose.swarm.yml \
-#     --with-registry-auth demo
-#
-# docker stack deploy never builds images (Swarm only pulls them), so this
-# file adds `image:` per service rather than needing to remove `build:` —
-# the base file's `build:` key is simply ignored in Swarm mode. Every
-# service is tagged with the same IMAGE_TAG (the commit SHA being deployed).
-#
-# The caddy service picks up an *externally* created Swarm config here
-# (see deploy.sh) instead of relying only on the bind-mounted Caddyfile
-# from docker-compose.yml. Swarm configs are immutable and versioned by
-# name, so a changed Caddyfile means creating a new named config and
-# pointing this file's `configs.caddyfile.name` at it — that's also what
-# makes Swarm recognize the caddy service needs to restart at all; a plain
-# bind mount's contents changing wouldn't trigger anything on its own.
-
-services:
-  # --- hosting/docker-swarm-hetzner for backend/go-grpc-gateway (http-service@1) ---
-  demo-api:
-    image: ghcr.io/example/demo-api:${IMAGE_TAG:-latest}
-    deploy:
-      replicas: 1
-      update_config:
-        order: start-first
-        failure_action: rollback
-        monitor: 30s
-      restart_policy:
-        condition: on-failure
-
-  caddy:
-    configs:
-      - source: caddyfile
-        target: /etc/caddy/Caddyfile
-    deploy:
-      replicas: 1
-      restart_policy:
-        condition: any
-
-networks:
-  default:
-    driver: overlay
-    attachable: true # lets standalone containers (e.g. the migration run in deploy.sh) join
-
+# Generated by kiln from plugins: backend/go-grpc-gateway, mobile/kmp-compose, edge/caddy, registry/ghcr, runtime/docker-swarm, ci/github-actions
 configs:
-  caddyfile:
-    external: true
-    name: caddyfile_${IMAGE_TAG:-latest}
+    caddyfile:
+        file: ./Caddyfile
+        name: demo_caddyfile_${IMAGE_TAG:-latest}
+networks:
+    default:
+        attachable: true
+        driver: overlay
+services:
+    demo-api:
+        deploy:
+            replicas: 1
+            restart_policy:
+                condition: on-failure
+            update_config:
+                failure_action: rollback
+                monitor: 30s
+                order: start-first
+        image: ghcr.io/example/demo-api:${IMAGE_TAG:-latest}
 
 ==> docker-compose.yml <==
-# Generated by kiln from plugins: backend/go-grpc-gateway, mobile/kmp-compose, hosting/docker-swarm-hetzner
+# Generated by kiln from plugins: backend/go-grpc-gateway, mobile/kmp-compose, edge/caddy, registry/ghcr, runtime/docker-swarm, ci/github-actions
+configs:
+    caddyfile:
+        file: ./Caddyfile
 services:
     caddy:
+        configs:
+            - source: caddyfile
+              target: /etc/caddy/Caddyfile
         image: caddy:2-alpine
         ports:
             - 80:80
             - 443:443
         restart: always
         volumes:
-            - ./Caddyfile:/etc/caddy/Caddyfile:ro
             - caddy_data:/data
             - caddy_config:/config
     demo-api:

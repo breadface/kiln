@@ -6,5 +6,8 @@ package plugins
 
 import "embed"
 
-//go:embed backend hosting mobile
+// Every <kind>/<name> directory is embedded, so a new plugin needs no
+// registration here.
+//
+//go:embed */*
 var FS embed.FS

@@ -15,19 +15,26 @@ const (
 	KindFrontend Kind = "frontend"
 	KindMobile   Kind = "mobile"
 	KindPayments Kind = "payments"
-	KindHosting  Kind = "hosting"
+	KindEdge     Kind = "edge"     // public entrypoint: TLS, routing
+	KindRegistry Kind = "registry" // where container images are stored
+	KindRuntime  Kind = "runtime"  // where and how services run
+	KindCI       Kind = "ci"       // builds, pushes and deploys
 	KindGlue     Kind = "glue"
 )
 
 // kindOrder controls the deterministic order plugins are applied and their
-// fragments are merged in: application services first, infrastructure last.
+// fragments are merged in: application services first, then infrastructure
+// from the outside in, then the pipeline that ships it.
 var kindOrder = map[Kind]int{
 	KindBackend:  0,
 	KindFrontend: 1,
 	KindMobile:   2,
 	KindPayments: 3,
-	KindHosting:  4,
-	KindGlue:     5,
+	KindEdge:     4,
+	KindRegistry: 5,
+	KindRuntime:  6,
+	KindCI:       7,
+	KindGlue:     8,
 }
 
 // Kinds returns every known Kind in application order.

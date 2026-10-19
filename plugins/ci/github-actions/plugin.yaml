@@ -1,0 +1,25 @@
+name: github-actions
+kind: ci
+version: 0.1.0
+description: >-
+  A GitHub Actions "Deploy" workflow: builds and pushes every oci-image@1
+  to the image registry, writes every env@1 into .env, and runs the
+  deploy-target@1 command with every deploy-secret@1 in its environment.
+  .github/DEPLOY.md lists every secret to add.
+
+consumes:
+  - contract: oci-image@1
+    min: 1
+  - contract: env@1
+  - contract: deploy-secret@1
+  - contract: deploy-target@1
+    min: 1
+    max: 1
+    as: DEPLOY
+  - contract: image-registry@1
+    min: 1
+    max: 1
+    as: REGISTRY
+
+next_steps:
+  - "# Add the repository secrets listed in .github/DEPLOY.md, then run the Deploy workflow"

@@ -1,6 +1,6 @@
 name: kmp-compose
 kind: mobile
-version: 0.2.0
+version: 0.3.0
 description: >-
   Minimal Kotlin Multiplatform + Compose Multiplatform mobile client: a
   single composeApp module (the Android app itself, plus commonMain/iosMain
@@ -38,9 +38,9 @@ placeholders:
 
 # The one backend service this client talks to. Its fields are exported as
 # API_<FIELD> placeholders (e.g. {{API_PORT}} in ApiClient.kt), so this
-# plugin works with any backend that provides http-service@1.
+# plugin works with any backend that provides http-service@2.
 consumes:
-  - contract: http-service@1
+  - contract: http-service@2
     min: 1
     max: 1
     as: API

@@ -1,0 +1,55 @@
+name: docker-swarm
+kind: runtime
+version: 0.1.0
+description: >-
+  Runs the project as a Docker Swarm stack on any server you can SSH into
+  (a Hetzner VPS, any VPS, or several). deploy.sh runs from CI or your
+  machine and drives the swarm manager's Docker over SSH using this
+  repository's files, so nothing is copied to the server by hand: it pulls
+  every oci-image@1, runs every migration@1, ships every config-file@1 as
+  a versioned Swarm config, deploys, and waits for each service to
+  converge.
+
+placeholders:
+  - name: STACK_NAME
+    description: Docker Swarm stack name
+    default: "{{APP_NAME}}"
+
+provides:
+  - contract: deploy-target@1
+    with:
+      COMMAND: ./deploy.sh
+  - contract: deploy-secret@1
+    with:
+      SECRET_NAME: DEPLOY_HOST
+      SECRET_DESCRIPTION: Hostname or IP of the swarm manager.
+  - contract: deploy-secret@1
+    with:
+      SECRET_NAME: DEPLOY_USER
+      SECRET_DESCRIPTION: SSH user on DEPLOY_HOST that can run docker. Optional; defaults to root.
+  - contract: deploy-secret@1
+    with:
+      SECRET_NAME: DEPLOY_SSH_KEY
+      SECRET_DESCRIPTION: Private SSH key for DEPLOY_USER.
+  - contract: deploy-secret@1
+    with:
+      SECRET_NAME: DEPLOY_KNOWN_HOSTS
+      SECRET_DESCRIPTION: >-
+        DEPLOY_HOST's known_hosts line(s), from `ssh-keyscan DEPLOY_HOST`.
+        Optional, but without it the host key is trusted on first use.
+
+consumes:
+  - contract: oci-image@1
+    min: 1
+  - contract: migration@1
+  - contract: config-file@1
+  - contract: image-registry@1
+    min: 1
+    max: 1
+    as: REGISTRY
+
+next_steps:
+  - "# Deploy by hand (logged in to {{REGISTRY_HOST}}, with a .env): DEPLOY_HOST=<server> IMAGE_TAG=<tag> ./deploy.sh"
+
+executable:
+  - "deploy.sh"

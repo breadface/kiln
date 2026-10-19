@@ -1,6 +1,6 @@
 name: go-grpc-gateway
 kind: backend
-version: 0.2.0
+version: 0.3.0
 description: >-
   Go API starter built proto-first: buf/protoc generate Go stubs from
   proto/, a real grpc.Server implements them, and grpc-gateway's ServeMux
@@ -29,12 +29,15 @@ placeholders:
     default: "9090"
 
 provides:
-  - contract: http-service@1
+  - contract: http-service@2
     with:
       SERVICE_NAME: "{{SERVICE_NAME}}"
       PORT: "{{PORT}}"
-      BUILD_CONTEXT: "{{APP_NAME}}-api"
       HEALTH_PATH: /api/health
+  - contract: oci-image@1
+    with:
+      SERVICE_NAME: "{{SERVICE_NAME}}"
+      BUILD_CONTEXT: "{{APP_NAME}}-api"
   - contract: migration@1
     with:
       SERVICE_NAME: "{{SERVICE_NAME}}"

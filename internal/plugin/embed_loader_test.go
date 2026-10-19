@@ -16,11 +16,11 @@ version: 0.1.0
 description: fake go-api plugin
 `)},
 		"backend/go-api/files/main.go": &fstest.MapFile{Data: []byte("package main\n")},
-		"hosting/docker-swarm-hetzner/plugin.yaml": &fstest.MapFile{Data: []byte(`
-name: docker-swarm-hetzner
-kind: hosting
+		"runtime/docker-swarm/plugin.yaml": &fstest.MapFile{Data: []byte(`
+name: docker-swarm
+kind: runtime
 version: 0.1.0
-description: fake hosting plugin
+description: fake runtime plugin
 `)},
 	}
 }
@@ -63,8 +63,8 @@ func TestList(t *testing.T) {
 	if len(all) != 2 {
 		t.Fatalf("List(\"\") returned %d plugins, want 2", len(all))
 	}
-	// Deterministic order: backend before hosting (Kind.Order()).
-	if all[0].Manifest.Kind != KindBackend || all[1].Manifest.Kind != KindHosting {
+	// Deterministic order: backend before runtime (Kind.Order()).
+	if all[0].Manifest.Kind != KindBackend || all[1].Manifest.Kind != KindRuntime {
 		t.Fatalf("unexpected order: %v, %v", all[0].Manifest.Kind, all[1].Manifest.Kind)
 	}
 

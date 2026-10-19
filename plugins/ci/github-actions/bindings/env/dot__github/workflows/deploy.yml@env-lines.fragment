@@ -1,0 +1,1 @@
+printf '%s=%s\n' {{ENV_NAME}} "${{ENV_NAME}}"

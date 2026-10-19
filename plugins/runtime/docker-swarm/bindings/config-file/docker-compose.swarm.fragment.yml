@@ -1,0 +1,8 @@
+# Swarm configs are immutable, so each deploy gets its own, named after the
+# image tag; a changed file then rolls the services that use it. `file` is
+# repeated because docker stack deploy replaces, rather than merges, a
+# config entry defined in both compose files.
+configs:
+  {{CONFIG_NAME}}:
+    file: ./{{FILE}}
+    name: {{STACK_NAME}}_{{CONFIG_NAME}}_${IMAGE_TAG:-latest}

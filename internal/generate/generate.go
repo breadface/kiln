@@ -48,14 +48,17 @@ func Slugify(name string) string {
 }
 
 // autoSelectKinds get chosen automatically when exactly one plugin exists
-// for them — nearly every project wants a backend and a hosting setup.
+// for them — nearly every project wants a backend and a way to ship it.
 // Every other kind (frontend, mobile, payments, glue) is opt-in only, even
 // with just one plugin available: not every project wants, say, a mobile
 // client, so silently adding one on every `kiln new` would be a real
 // regression, not a convenience.
 var autoSelectKinds = map[plugin.Kind]bool{
-	plugin.KindBackend: true,
-	plugin.KindHosting: true,
+	plugin.KindBackend:  true,
+	plugin.KindEdge:     true,
+	plugin.KindRegistry: true,
+	plugin.KindRuntime:  true,
+	plugin.KindCI:       true,
 }
 
 // AutoSelects reports whether k is chosen automatically when exactly one

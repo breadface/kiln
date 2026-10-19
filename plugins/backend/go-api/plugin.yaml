@@ -1,6 +1,6 @@
 name: go-api
 kind: backend
-version: 0.2.0
+version: 0.3.0
 description: >-
   Minimal Go HTTP API starter: stdlib net/http routing, env-based config,
   Postgres via gorm, and a Connect/Migrate split for safe deploys.
@@ -18,12 +18,15 @@ placeholders:
     default: "8080"
 
 provides:
-  - contract: http-service@1
+  - contract: http-service@2
     with:
       SERVICE_NAME: "{{SERVICE_NAME}}"
       PORT: "{{PORT}}"
-      BUILD_CONTEXT: "{{APP_NAME}}-api"
       HEALTH_PATH: /api/health
+  - contract: oci-image@1
+    with:
+      SERVICE_NAME: "{{SERVICE_NAME}}"
+      BUILD_CONTEXT: "{{APP_NAME}}-api"
   - contract: migration@1
     with:
       SERVICE_NAME: "{{SERVICE_NAME}}"

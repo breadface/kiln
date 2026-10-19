@@ -23,8 +23,8 @@ func service(name, port string) *plugin.Plugin {
 	return &plugin.Plugin{Manifest: plugin.Manifest{
 		Name: name, Kind: plugin.KindBackend,
 		Provides: []plugin.Provide{
-			{Contract: "http-service@1", With: map[string]string{
-				"SERVICE_NAME": "{{APP_NAME}}-" + name, "PORT": port, "BUILD_CONTEXT": name,
+			{Contract: "http-service@2", With: map[string]string{
+				"SERVICE_NAME": "{{APP_NAME}}-" + name, "PORT": port,
 			}},
 			{Contract: "env@1", With: map[string]string{"ENV_NAME": strings.ToUpper(name) + "_KEY"}},
 		},
@@ -33,8 +33,8 @@ func service(name, port string) *plugin.Plugin {
 
 func TestResolveBindingsBindsEveryProvider(t *testing.T) {
 	host := &plugin.Plugin{Manifest: plugin.Manifest{
-		Name: "host", Kind: plugin.KindHosting,
-		Consumes: []plugin.Consume{{Contract: "http-service@1", Min: 1}, {Contract: "env@1"}},
+		Name: "host", Kind: plugin.KindRuntime,
+		Consumes: []plugin.Consume{{Contract: "http-service@2", Min: 1}, {Contract: "env@1"}},
 	}}
 	selected := []*plugin.Plugin{service("api", "8080"), service("worker", "9000"), host}
 
@@ -46,7 +46,7 @@ func TestResolveBindingsBindsEveryProvider(t *testing.T) {
 		t.Fatalf("got %d bindings, want 2 http-service + 2 env", len(bindings))
 	}
 	b := bindings[0]
-	if b.Contract != "http-service@1" || b.Consumer != host || b.Values["SERVICE_NAME"] != "demo-api" {
+	if b.Contract != "http-service@2" || b.Consumer != host || b.Values["SERVICE_NAME"] != "demo-api" {
 		t.Errorf("first binding = %+v, want host bound to demo-api", b)
 	}
 	if b.Values["PATH_PREFIX"] != "/" {
@@ -56,8 +56,8 @@ func TestResolveBindingsBindsEveryProvider(t *testing.T) {
 
 func TestResolveBindingsCardinality(t *testing.T) {
 	host := &plugin.Plugin{Manifest: plugin.Manifest{
-		Name: "host", Kind: plugin.KindHosting,
-		Consumes: []plugin.Consume{{Contract: "http-service@1", Min: 1}},
+		Name: "host", Kind: plugin.KindRuntime,
+		Consumes: []plugin.Consume{{Contract: "http-service@2", Min: 1}},
 	}}
 	if _, _, err := ResolveBindings([]*plugin.Plugin{host}, registry(t), scaffold.Values{}); err == nil {
 		t.Error("expected an error when min: 1 has no provider")
@@ -65,7 +65,7 @@ func TestResolveBindingsCardinality(t *testing.T) {
 
 	single := &plugin.Plugin{Manifest: plugin.Manifest{
 		Name: "single", Kind: plugin.KindMobile,
-		Consumes: []plugin.Consume{{Contract: "http-service@1", Max: 1}},
+		Consumes: []plugin.Consume{{Contract: "http-service@2", Max: 1}},
 	}}
 	selected := []*plugin.Plugin{service("api", "8080"), service("worker", "9000"), single}
 	if _, _, err := ResolveBindings(selected, registry(t), scaffold.Values{"APP_NAME": "demo"}); err == nil {
@@ -76,7 +76,7 @@ func TestResolveBindingsCardinality(t *testing.T) {
 func TestResolveBindingsExportsAs(t *testing.T) {
 	mobile := &plugin.Plugin{Manifest: plugin.Manifest{
 		Name: "mobile", Kind: plugin.KindMobile,
-		Consumes: []plugin.Consume{{Contract: "http-service@1", Min: 1, Max: 1, As: "API"}},
+		Consumes: []plugin.Consume{{Contract: "http-service@2", Min: 1, Max: 1, As: "API"}},
 	}}
 	_, values, err := ResolveBindings([]*plugin.Plugin{service("api", "8080"), mobile}, registry(t), scaffold.Values{"APP_NAME": "demo"})
 	if err != nil {
@@ -109,7 +109,7 @@ func TestResolveBindingsValidatesProvides(t *testing.T) {
 
 func TestResolveBindingsLabelIsFirstField(t *testing.T) {
 	host := &plugin.Plugin{Manifest: plugin.Manifest{
-		Name: "host", Kind: plugin.KindHosting,
+		Name: "host", Kind: plugin.KindRuntime,
 		Consumes: []plugin.Consume{{Contract: "env@1"}},
 	}}
 	bindings, _, err := ResolveBindings([]*plugin.Plugin{service("api", "8080"), host}, registry(t), scaffold.Values{"APP_NAME": "demo"})

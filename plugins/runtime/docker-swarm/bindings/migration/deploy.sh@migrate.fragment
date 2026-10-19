@@ -1,0 +1,5 @@
+echo "=== Running migrations: {{SERVICE_NAME}} ==="
+docker run --rm \
+	--env-file .env \
+	"{{REGISTRY_HOST}}/{{REGISTRY_NAMESPACE}}/{{SERVICE_NAME}}:$IMAGE_TAG" \
+	{{COMMAND}}
