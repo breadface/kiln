@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"io/fs"
+	"strings"
 	"testing"
 	"testing/fstest"
 )
@@ -73,5 +74,37 @@ func TestList(t *testing.T) {
 	}
 	if len(backendOnly) != 1 || backendOnly[0].Manifest.Name != "go-api" {
 		t.Fatalf("List(backend) = %+v, want just go-api", backendOnly)
+	}
+}
+
+func TestDigest(t *testing.T) {
+	base := fixtureFS()
+	l := NewEmbedLoader(base)
+	p, err := l.Resolve(KindBackend, "go-api")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if !strings.HasPrefix(p.Digest, "sha256:") {
+		t.Fatalf("Digest = %q, want a sha256: digest", p.Digest)
+	}
+
+	again, _ := NewEmbedLoader(fixtureFS()).Resolve(KindBackend, "go-api")
+	if again.Digest != p.Digest {
+		t.Error("the same content should hash the same")
+	}
+
+	changed := fixtureFS()
+	changed["backend/go-api/files/main.go"] = &fstest.MapFile{Data: []byte("package main // edited\n")}
+	edited, _ := NewEmbedLoader(changed).Resolve(KindBackend, "go-api")
+	if edited.Digest == p.Digest {
+		t.Error("editing a file should change the digest")
+	}
+
+	moved := fixtureFS()
+	moved["backend/go-api/files/app.go"] = moved["backend/go-api/files/main.go"]
+	delete(moved, "backend/go-api/files/main.go")
+	renamed, _ := NewEmbedLoader(moved).Resolve(KindBackend, "go-api")
+	if renamed.Digest == p.Digest {
+		t.Error("renaming a file should change the digest")
 	}
 }

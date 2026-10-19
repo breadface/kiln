@@ -11,6 +11,8 @@ type Plugin struct {
 	// future a git remote URL). Recorded into the generated project's
 	// kiln.yaml so `kiln upgrade` knows where to re-fetch from.
 	Source string
+	// Digest is a content hash of FS (see Digest).
+	Digest string
 }
 
 // Ref returns the plugin's "kind/name" reference.
