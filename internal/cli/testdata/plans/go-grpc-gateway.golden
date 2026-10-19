@@ -20,7 +20,7 @@ Values
   SERVICE_NAME  demo-api
   STACK_NAME    demo
 
-Files (21)
+Files (22)
   .github/workflows/deploy.yml
   Caddyfile
   buf.gen.yaml
@@ -32,6 +32,7 @@ Files (21)
   demo-api/db/db.go
   demo-api/dotenv/dotenv.go
   demo-api/go.mod
+  demo-api/go.sum
   demo-api/main.go
   demo-api/proto/pb/greeter/greeter.pb.go
   demo-api/proto/pb/greeter/greeter.pb.gw.go
@@ -49,12 +50,13 @@ Hashes
   sha256:24a8ed6e69346a8c79da35967ac913b2b8a10010088b87ccbc5b965544613ebd  buf.gen.yaml
   sha256:68c60b5e3e4cec391a9a96736a357d7df6bd8f57a50b1468af0f836587a0ec16  buf.yaml
   sha256:c084223e489410c99b713909ead465663e196d74e541a0d95dd0d65c00a3b731  demo-api/.env.example
-  sha256:0f2a9791e5bb427effd1525d5e73bb881ccc616eea39d337dc4088b631e3efe2  demo-api/Dockerfile
+  sha256:e7edb8a1226911ad03e8c3e311559176dcd1cb6228923d2a75e532d54f022a37  demo-api/Dockerfile
   sha256:281ffcdbc6dde83168be83a389362bd1074f43cc5d8240725bfa72557a5b6bcf  demo-api/Makefile
   sha256:792536e410427eac4a5c7ff81ce3f3befc9dd5f0739c68e4a74f6d7e22b2ec8d  demo-api/config/config.go
   sha256:6b8b46943d26fbcf7b87f1d445c2946bcf0b794228870200405022e81fd933ac  demo-api/db/db.go
   sha256:5554c4aeedde221acf697b63866ce2a47616f53951ea7880c4523ec5c5843f9f  demo-api/dotenv/dotenv.go
-  sha256:b14587936c5802c0711953d404cf68de8c8d43a3928834751b604ab53b2b751c  demo-api/go.mod
+  sha256:d534dd3436a6174fc5fd04ab9f41845a5e14cfa5cd6be8c2b475d3522615b488  demo-api/go.mod
+  sha256:154a51445a47f54ac0ea4753c59589d0b90a0f0e2904146786e7566eb8916649  demo-api/go.sum
   sha256:70fb9891366b95589901ae924afe451854f465a16e8cebad9a567544f5351432  demo-api/main.go
   sha256:0015da8eb648845efcf86e8d3ac221d3725884267bc6070e0965b784e12d24d9  demo-api/proto/pb/greeter/greeter.pb.go
   sha256:3bfe0530805c73f852b2c7185f45a3bf8d70fd89a291fb60c791b1e8c8a1e001  demo-api/proto/pb/greeter/greeter.pb.gw.go

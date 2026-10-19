@@ -12,6 +12,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/breadface/kiln/internal/generate"
 	"github.com/breadface/kiln/internal/manifest"
 	"github.com/breadface/kiln/internal/plugin"
 	"github.com/breadface/kiln/internal/scaffold"
@@ -21,11 +22,11 @@ import (
 // TestNewEndToEnd drives the real `kiln new` command against the actual
 // embedded plugins (not fakes) and checks the result the way a person
 // would: does it build, is the compose file well-formed, did the
-// executable bit survive. It shells out to `go build`, which runs `go mod
-// tidy` over the network via the go-api plugin's post_copy hook.
+// executable bit survive. It shells out to `go build`, which downloads the
+// plugin's pinned modules over the network.
 func TestNewEndToEnd(t *testing.T) {
 	if testing.Short() {
-		t.Skip("shells out to go build/go mod tidy over the network; skipped with -short")
+		t.Skip("go build downloads the pinned modules over the network; skipped with -short")
 	}
 
 	dir := t.TempDir()
@@ -104,7 +105,7 @@ func TestNewEndToEnd(t *testing.T) {
 // stubs committed into the plugin (no buf/network access needed here).
 func TestNewEndToEndGRPCGateway(t *testing.T) {
 	if testing.Short() {
-		t.Skip("shells out to go build/go mod tidy over the network; skipped with -short")
+		t.Skip("go build downloads the pinned modules over the network; skipped with -short")
 	}
 
 	dir := t.TempDir()
@@ -299,17 +300,11 @@ func TestNewWithoutMobileFlagHasNoMobileDir(t *testing.T) {
 
 // TestApplyEndToEnd drives `kiln new`, then `kiln apply` on the generated
 // project's own kiln.yaml into a second directory, through the real
-// commands — writing to disk and running post_copy hooks — and checks both
-// projects came out identical.
-//
-// It compares the two directories rather than kiln.yaml's hashes: those
-// record Kiln's own rendered output, and post_copy hooks (go mod tidy)
-// rewrite some files afterwards. TestApplyReproducesPlan covers the hashes.
+// commands, and checks that both projects on disk match the hashes
+// kiln.yaml recorded exactly. That holds because no plugin rewrites files
+// after generation (dependencies are pinned in the plugins rather than
+// resolved by a `go mod tidy` hook), so kiln.yaml describes the disk.
 func TestApplyEndToEnd(t *testing.T) {
-	if testing.Short() {
-		t.Skip("post_copy hooks run go mod tidy over the network; skipped with -short")
-	}
-
 	first, second := t.TempDir(), t.TempDir()
 	run := func(args ...string) {
 		t.Helper()
@@ -337,18 +332,16 @@ func TestApplyEndToEnd(t *testing.T) {
 	if len(m.Files) == 0 {
 		t.Fatal("kiln.yaml records no file hashes")
 	}
-	for path := range m.Files {
-		want, err := os.ReadFile(filepath.Join(first, "e2eapp", filepath.FromSlash(path)))
-		if err != nil {
-			t.Fatal(err)
-		}
-		got, err := os.ReadFile(filepath.Join(second, "e2eapp", filepath.FromSlash(path)))
-		if err != nil {
-			t.Errorf("apply did not produce %s: %v", path, err)
-			continue
-		}
-		if !bytes.Equal(got, want) {
-			t.Errorf("%s differs between `kiln new` and `kiln apply`", path)
+	for _, dir := range []string{first, second} {
+		for path, hash := range m.Files {
+			content, err := os.ReadFile(filepath.Join(dir, "e2eapp", filepath.FromSlash(path)))
+			if err != nil {
+				t.Errorf("%s: %v", path, err)
+				continue
+			}
+			if got := generate.HashContent(content); got != hash {
+				t.Errorf("%s on disk hashes to %s, kiln.yaml records %s", path, got, hash)
+			}
 		}
 	}
 }

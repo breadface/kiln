@@ -45,5 +45,4 @@ next_steps:
   - cp {{APP_NAME}}-api/.env.example {{APP_NAME}}-api/.env
   - cd {{APP_NAME}}-api && make run
 
-post_copy: hooks/post_copy.sh
 contributes_go_module: true
