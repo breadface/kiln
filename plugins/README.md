@@ -187,8 +187,32 @@ A consumer uses its bindings in two ways:
   say, a payments provider — just provides `http-service@2` /
   `oci-image@1` / `env@1`, and the edge, CI and runtime pick it up with no
   change (see `internal/cli/contracts_test.go`).
+- **`bindings/<contract-name>/files/`** holds whole files, rendered once
+  per bound provider the same way — for adding complete files somewhere a
+  provider names. `payments/stripe` writes its adapter into whatever
+  directory a Go backend's `go-backend@1` reports. Two bindings generating
+  one path with different content is an error.
 - **`as:`** (requires `max: 1`) exports the single provider's fields as
   global placeholders, for use anywhere in the consumer's `files/`.
+
+### Extending a backend's code
+
+A capability (payments, and later email, storage, ...) is split between
+the backend and a provider plugin, like ports and adapters:
+
+- The **backend owns the port**: when a provider is bound (e.g.
+  `payment-provider@1`), it generates the capability's package in its own
+  language — the interface, storage, endpoints, and a local fake — from
+  `bindings/payment-provider/files/`. Both Go backends ship identical
+  copies (`TestGoBackendsShareBindings` keeps them in sync).
+- The **provider plugin adds only its adapter**, in each language it
+  supports, through the backend's extension contract — `go-backend@1` for
+  Go, which promises named insert slots in `main.go` and `.env.example`
+  and which variables are in scope at each (see its description in
+  `contracts/`).
+
+A second provider (e.g. Paystack) is then one adapter, with no change to
+the backend or to Stripe.
 
 ## Fragments
 

@@ -1,0 +1,41 @@
+name: stripe
+kind: payments
+version: 0.1.0
+description: >-
+  Stripe Checkout for one-time payments. Provides payment-provider@1, so
+  the backend generates its payments package (endpoints, payments table,
+  and a fake provider for local development), and adds only the Stripe
+  adapter to it: hosted Checkout Sessions created over Stripe's HTTP API
+  (no SDK), and webhooks verified by signature, with replay protection.
+
+provides:
+  - contract: payment-provider@1
+    with:
+      PROVIDER: stripe
+  - contract: env@1
+    with:
+      ENV_NAME: STRIPE_SECRET_KEY
+      ENV_DESCRIPTION: Stripe secret API key (sk_live_... in production), from Dashboard → Developers → API keys
+  - contract: env@1
+    with:
+      ENV_NAME: STRIPE_WEBHOOK_SECRET
+      ENV_DESCRIPTION: >-
+        Signing secret (whsec_...) of the webhook endpoint
+        https://<your domain>/api/payments/webhooks/stripe, from Dashboard →
+        Developers → Webhooks
+  - contract: env@1
+    with:
+      ENV_NAME: PAYMENTS_PROVIDER
+      ENV_DESCRIPTION: >-
+        Leave unset in production (it defaults to stripe). "fake" switches
+        to a local checkout page anyone can mark paid — development only.
+
+# The adapter is Go; it's added to whichever Go backend is selected.
+consumes:
+  - contract: go-backend@1
+    min: 1
+    max: 1
+
+next_steps:
+  - "# Payments: run `make migrate` in {{APP_NAME}}-api once, then try the fake checkout locally (PAYMENTS_PROVIDER=fake)"
+  - "# Stripe: add a webhook endpoint at https://<your domain>/api/payments/webhooks/stripe for checkout.session.completed, checkout.session.async_payment_succeeded, checkout.session.async_payment_failed and checkout.session.expired"

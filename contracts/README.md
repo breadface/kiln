@@ -10,11 +10,13 @@ how plugins provide and consume them.
 | [`http-service@2`](http-service@2.yaml) | backends | edge (routes), mobile (`API_*`) | A service serving HTTP on one port |
 | [`oci-image@1`](oci-image@1.yaml) | backends | ci (build, push), runtime (run, verify) | A container image built from the project |
 | [`migration@1`](migration@1.yaml) | backends | runtime | A one-off command run before each rollout |
-| [`env@1`](env@1.yaml) | anything needing a runtime variable | ci (writes `.env`) | One application environment variable |
+| [`env@1`](env@1.yaml) | anything needing a runtime variable | ci (writes `.env`), backends (container env) | One application environment variable |
 | [`config-file@1`](config-file@1.yaml) | edge | runtime (versioned configs) | A project file a service reads at runtime |
 | [`image-registry@1`](image-registry@1.yaml) | registry | ci (push), runtime (pull) | Where images live, and how to log in |
 | [`deploy-target@1`](deploy-target@1.yaml) | runtime | ci | The command that deploys the project |
 | [`deploy-secret@1`](deploy-secret@1.yaml) | runtime | ci (exports it) | A secret the deploy command needs |
+| [`go-backend@1`](go-backend@1.yaml) | Go backends | payments providers (adapter code) | A Go backend's extension slots |
+| [`payment-provider@1`](payment-provider@1.yaml) | payments | backends (generate the payments package) | A payment provider adapter exists |
 
 `http-service@1` (which also carried build fields, now `oci-image@1`) was
 removed before any plugin outside this repository depended on it.

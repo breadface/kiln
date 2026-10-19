@@ -15,6 +15,7 @@ func TestLoadBundledContracts(t *testing.T) {
 	for _, id := range []string{
 		"http-service@2", "oci-image@1", "migration@1", "env@1", "config-file@1",
 		"image-registry@1", "deploy-target@1", "deploy-secret@1",
+		"go-backend@1", "payment-provider@1",
 	} {
 		if _, ok := r.Get(id); !ok {
 			t.Errorf("bundled contract %s not found", id)

@@ -1,0 +1,2 @@
+"{{MODULE_PATH}}/payments"
+"{{MODULE_PATH}}/payments/adapters"

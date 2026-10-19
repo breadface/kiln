@@ -1,5 +1,5 @@
 Plugins
-  backend/go-grpc-gateway  0.3.0
+  backend/go-grpc-gateway  0.4.0
   mobile/kmp-compose       0.3.0
   edge/caddy               0.1.0
   registry/ghcr            0.1.0
@@ -7,6 +7,9 @@ Plugins
   ci/github-actions        0.1.0
 
 Bindings
+  env@1             DATABASE_URL        backend/go-grpc-gateway -> backend/go-grpc-gateway
+  env@1             JWT_SECRET          backend/go-grpc-gateway -> backend/go-grpc-gateway
+  env@1             CORS_ORIGINS        backend/go-grpc-gateway -> backend/go-grpc-gateway
   http-service@2    demo-api            backend/go-grpc-gateway -> mobile/kmp-compose
   http-service@2    demo-api            backend/go-grpc-gateway -> edge/caddy
   oci-image@1       demo-api            backend/go-grpc-gateway -> runtime/docker-swarm
@@ -122,11 +125,11 @@ Hashes
   sha256:5554c4aeedde221acf697b63866ce2a47616f53951ea7880c4523ec5c5843f9f  demo-api/dotenv/dotenv.go
   sha256:d534dd3436a6174fc5fd04ab9f41845a5e14cfa5cd6be8c2b475d3522615b488  demo-api/go.mod
   sha256:154a51445a47f54ac0ea4753c59589d0b90a0f0e2904146786e7566eb8916649  demo-api/go.sum
-  sha256:70fb9891366b95589901ae924afe451854f465a16e8cebad9a567544f5351432  demo-api/main.go
+  sha256:1b1d3eccdad6172789f56fe9b981ae6a8eca8cb423831d7082b1adf6991f0e3f  demo-api/main.go
   sha256:0015da8eb648845efcf86e8d3ac221d3725884267bc6070e0965b784e12d24d9  demo-api/proto/pb/greeter/greeter.pb.go
   sha256:3bfe0530805c73f852b2c7185f45a3bf8d70fd89a291fb60c791b1e8c8a1e001  demo-api/proto/pb/greeter/greeter.pb.gw.go
   sha256:22a36341e397987ca6e927417ea91140fddaee7a7ee463cdcdf449457543421a  demo-api/proto/pb/greeter/greeter_grpc.pb.go
-  sha256:87456b25d7ecd535e2c5dc3f449f69ac64f20aa1fbbfcc5ca1d6689486b086f6  demo-api/server/greeter.go
+  sha256:70c72b7d394c03d0ab4ada2179814dcfc6146262750c7c6afed0354c86a6f212  demo-api/server/greeter.go
   sha256:cc612e77ae4fced49e4e4282f434832a97598029ee0c3119b629adcec44ca573  demo-mobile/.gitignore
   sha256:a7dea234206a809372fa5fa6c30f67470fc1ec77526c83fa1b5341acc5c57043  demo-mobile/build.gradle.kts
   sha256:3d56d0396a0085cfcb188e1f6110fca18f7cd03bd328c3778747cde39975b75d  demo-mobile/composeApp/build.gradle.kts
@@ -164,7 +167,7 @@ Hashes
   sha256:300495bda533ca77948b973aeb3a0cd310c4794dfaa2706ceb6329f0bfc70a86  demo-mobile/settings.gradle.kts
   sha256:600f0fff7ae9992ab345c68e90eeb0e1ec87358994d6711be3a0dbccd80d1c6e  deploy.sh
   sha256:9bb06d1883bd6bed5eac9b25654339f42ba93737f509ae46d7fdc56537d365c6  docker-compose.swarm.yml
-  sha256:00061275d555390a6b0d735cc4b67e668223690665cae6f4e0434b601b12431f  docker-compose.yml
+  sha256:aa30dd7e6bdd3313b4be90746dc6530a05e4ae38f4acd9f48bb13bbf122f397d  docker-compose.yml
   sha256:78f2f1a8ca87317041e2dc6ea5a1a19c256a7478d04f23b098a553f5b9512589  proto/greeter/greeter.proto
 
 ==> .github/DEPLOY.md <==
@@ -493,10 +496,10 @@ services:
             - 8.8.8.8
             - 1.1.1.1
         environment:
-            - DATABASE_URL=${DATABASE_URL}
-            - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
-            - CORS_ORIGINS=${CORS_ORIGINS:-*}
-            - GRPC_PORT=9090
+            CORS_ORIGINS: ${CORS_ORIGINS:-*}
+            DATABASE_URL: ${DATABASE_URL:-}
+            GRPC_PORT: "9090"
+            JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
         expose:
             - "8080"
         healthcheck:

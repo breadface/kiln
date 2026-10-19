@@ -70,6 +70,7 @@ Docker-in-Docker swarm, twice, and checks the result:
 ```sh
 scripts/smoke/docker-swarm.sh                          # go-api
 scripts/smoke/docker-swarm.sh --backend go-grpc-gateway
+scripts/smoke/docker-swarm.sh --payments               # + the payment flow
 ```
 
 A backend must pin every dependency in `go.mod.tmpl` and ship

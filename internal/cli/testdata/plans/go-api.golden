@@ -1,11 +1,14 @@
 Plugins
-  backend/go-api        0.3.0
+  backend/go-api        0.4.0
   edge/caddy            0.1.0
   registry/ghcr         0.1.0
   runtime/docker-swarm  0.1.0
   ci/github-actions     0.1.0
 
 Bindings
+  env@1             DATABASE_URL        backend/go-api -> backend/go-api
+  env@1             JWT_SECRET          backend/go-api -> backend/go-api
+  env@1             CORS_ORIGINS        backend/go-api -> backend/go-api
   http-service@2    demo-api            backend/go-api -> edge/caddy
   oci-image@1       demo-api            backend/go-api -> runtime/docker-swarm
   migration@1       demo-api            backend/go-api -> runtime/docker-swarm
@@ -69,11 +72,11 @@ Hashes
   sha256:5554c4aeedde221acf697b63866ce2a47616f53951ea7880c4523ec5c5843f9f  demo-api/dotenv/dotenv.go
   sha256:e2bb6a671f85e14054910e551b321e2156dc873ddefff04a077a1b511c5f5a47  demo-api/go.mod
   sha256:ffe4363666df72062fdc388b3ce71a29a9cedafbc211f54c10e4aa9154870ba7  demo-api/go.sum
-  sha256:e833a0f65478395b9ce3aa7fd4fd244be00b17db6eb653c120a389a93562df8b  demo-api/main.go
-  sha256:057ca0002ab06b83181d65928b55f5ff941c906f1d63bbc1512d50b8f8269cd3  demo-api/server/server.go
+  sha256:5944fd219885b39739009fdc4c20e799b68d7f89d0b2e16555e0b428021850bb  demo-api/main.go
+  sha256:8c74963c803ddac7dc1d37a161248db3a56a023e147ddb71286e8a241f679db4  demo-api/server/server.go
   sha256:622295c0f0e115f5b64c3ed60641b565dada99aabd11dc10749683ed8a9b2d90  deploy.sh
   sha256:38a0ca12442520e9e2a6bbcf30b134fd342dbb9b0686e69cfc438977124c165d  docker-compose.swarm.yml
-  sha256:3805f35003cd7e53e478c15d76f9d895d2e25d63ae78b508b6aa7bdc3b65c375  docker-compose.yml
+  sha256:a979fd0093c896f966b1dc1e82c2d1ef9fc7a0c043a6f51bf8bb88db9763be0b  docker-compose.yml
 
 ==> .github/DEPLOY.md <==
 # Deploying demo
@@ -373,9 +376,9 @@ services:
             - 8.8.8.8
             - 1.1.1.1
         environment:
-            - DATABASE_URL=${DATABASE_URL}
-            - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
-            - CORS_ORIGINS=${CORS_ORIGINS:-*}
+            CORS_ORIGINS: ${CORS_ORIGINS:-*}
+            DATABASE_URL: ${DATABASE_URL:-}
+            JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
         expose:
             - "8080"
         healthcheck:

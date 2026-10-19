@@ -31,6 +31,14 @@ var scenarios = map[string][]string{
 		"--backend", "go-grpc-gateway",
 		"--mobile", "kmp-compose", "--mobile-package", "com.example.demo",
 	},
+	"go-api+stripe": {
+		"--backend", "go-api",
+		"--payments", "stripe",
+	},
+	"go-grpc-gateway+stripe": {
+		"--backend", "go-grpc-gateway",
+		"--payments", "stripe",
+	},
 }
 
 var commonArgs = []string{

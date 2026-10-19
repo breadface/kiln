@@ -1,0 +1,110 @@
+package payments
+
+import (
+	"encoding/json"
+	"errors"
+	"io"
+	"log"
+	"net/http"
+)
+
+const maxBodyBytes = 1 << 20
+
+// Routes registers the payments endpoints on mux:
+//
+//	POST /api/payments                       create a payment, get its checkout_url
+//	GET  /api/payments/{id}                  a payment's current status
+//	POST /api/payments/webhooks/{provider}   the provider's webhook endpoint
+//
+// POST /api/payments trusts the amount it's sent, which suits a tip jar or
+// a demo — not a shop. For real purchases, price things on the server:
+// call Service.Create from your own (authenticated) handler with amounts
+// from your own data, and remove this route.
+func (s *Service) Routes(mux *http.ServeMux) {
+	mux.HandleFunc("POST /api/payments", s.handleCreate)
+	mux.HandleFunc("GET /api/payments/{id}", s.handleGet)
+	mux.HandleFunc("POST /api/payments/webhooks/{provider}", s.handleWebhook)
+	if _, ok := s.provider.(fakeProvider); ok {
+		s.fakeRoutes(mux)
+	}
+}
+
+func (s *Service) handleCreate(w http.ResponseWriter, r *http.Request) {
+	var n NewPayment
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodyBytes)).Decode(&n); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	p, err := s.Create(r.Context(), n)
+	var verr *ValidationError
+	switch {
+	case errors.As(err, &verr):
+		writeError(w, http.StatusBadRequest, verr.Error())
+		return
+	case err != nil:
+		log.Printf("payments: create: %v", err)
+		writeError(w, http.StatusBadGateway, "could not start checkout")
+		return
+	}
+	writeJSON(w, http.StatusCreated, p)
+}
+
+func (s *Service) handleGet(w http.ResponseWriter, r *http.Request) {
+	p, err := s.Get(r.Context(), r.PathValue("id"))
+	switch {
+	case errors.Is(err, ErrNotFound):
+		writeError(w, http.StatusNotFound, "payment not found")
+		return
+	case err != nil:
+		log.Printf("payments: get: %v", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	writeJSON(w, http.StatusOK, p)
+}
+
+// handleWebhook acknowledges with 2xx once an event is recorded or safely
+// ignorable, and 5xx when it should be retried — providers redeliver
+// anything not acknowledged.
+func (s *Service) handleWebhook(w http.ResponseWriter, r *http.Request) {
+	if r.PathValue("provider") != s.name {
+		writeError(w, http.StatusNotFound, "unknown payment provider")
+		return
+	}
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBodyBytes))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "unreadable body")
+		return
+	}
+	ev, ok, err := s.provider.ParseWebhook(r.Header, body)
+	if err != nil {
+		log.Printf("payments: rejected webhook: %v", err)
+		writeError(w, http.StatusBadRequest, "invalid webhook")
+		return
+	}
+	if !ok {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	switch err := s.apply(r.Context(), ev); {
+	case errors.Is(err, ErrNotFound):
+		// Not one of ours (e.g. another app on the same provider account):
+		// acknowledge so it isn't redelivered forever.
+		log.Printf("payments: webhook for unknown payment %q", ev.PaymentID)
+	case err != nil:
+		log.Printf("payments: applying webhook: %v", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+func writeError(w http.ResponseWriter, status int, msg string) {
+	writeJSON(w, status, map[string]string{"error": msg})
+}

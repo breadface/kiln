@@ -1,0 +1,5 @@
+paymentsService, err := payments.New(conn, adapters.All)
+if err != nil {
+	log.Fatalf("payments: %v", err)
+}
+routes = append(routes, paymentsService.Routes)

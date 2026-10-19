@@ -4,6 +4,7 @@ PORT={{PORT}}
 DATABASE_URL=postgres://postgres:postgres@localhost:5432/{{APP_NAME}}?sslmode=disable
 JWT_SECRET=change-me-in-production
 CORS_ORIGINS=*
+# kiln:insert env
 
 # Postgres is assumed to be externally managed (a local install, or a
 # managed provider) — this project doesn't run Postgres itself, locally or

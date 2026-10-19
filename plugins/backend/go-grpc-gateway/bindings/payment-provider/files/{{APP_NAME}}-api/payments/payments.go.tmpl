@@ -1,0 +1,96 @@
+// Package payments takes one-time payments through a provider's hosted
+// checkout page, and records their outcome from the provider's signed
+// webhooks.
+//
+// Providers (Stripe, ...) live in their own packages and implement
+// Provider; adapters.All lists the ones compiled in. The built-in fake
+// provider serves its own checkout page, so the whole flow works locally
+// with no account and no network — set PAYMENTS_PROVIDER=fake.
+package payments
+
+import (
+	"context"
+	"errors"
+	"net/http"
+	"time"
+)
+
+// DefaultProvider is used when PAYMENTS_PROVIDER is unset — always the
+// real provider, never the fake, so a production deploy can't fall back to
+// a checkout anyone can mark paid.
+const DefaultProvider = "{{PROVIDER}}"
+
+// Status is where a payment is in its lifecycle. A payment starts pending
+// and moves to exactly one final status, once.
+type Status string
+
+const (
+	StatusPending   Status = "pending"
+	StatusSucceeded Status = "succeeded"
+	StatusFailed    Status = "failed"
+	StatusCanceled  Status = "canceled"
+)
+
+// Payment is one checkout attempt, stored in the payments table.
+type Payment struct {
+	ID          string    `gorm:"primaryKey;size:40" json:"id"`
+	Provider    string    `gorm:"size:32;not null" json:"provider"`
+	ProviderRef string    `gorm:"size:255;index" json:"-"`
+	AmountMinor int64     `gorm:"not null" json:"amount"`
+	Currency    string    `gorm:"size:3;not null" json:"currency"`
+	Description string    `json:"description"`
+	Status      Status    `gorm:"size:16;not null;index" json:"status"`
+	CheckoutURL string    `json:"checkout_url,omitempty"`
+	SuccessURL  string    `json:"-"`
+	CancelURL   string    `json:"-"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+// CheckoutRequest is what a Provider needs to start a hosted checkout.
+type CheckoutRequest struct {
+	PaymentID   string
+	AmountMinor int64 // in the currency's smallest unit, e.g. cents
+	Currency    string
+	Description string
+	SuccessURL  string
+	CancelURL   string
+}
+
+// Checkout is a started hosted checkout.
+type Checkout struct {
+	ProviderRef string // the provider's own ID for it
+	URL         string // where to send the customer
+}
+
+// Event is a payment status change a provider reported in a webhook.
+type Event struct {
+	PaymentID   string
+	ProviderRef string
+	Status      Status
+}
+
+// Provider is a payment provider adapter.
+type Provider interface {
+	// CreateCheckout starts a hosted checkout for one payment.
+	CreateCheckout(ctx context.Context, req CheckoutRequest) (Checkout, error)
+	// ParseWebhook verifies that a webhook request was sent by the
+	// provider — returning ErrInvalidSignature if not — and returns the
+	// payment event it reports. ok is false for events that don't concern
+	// a payment's status, which are acknowledged and ignored.
+	ParseWebhook(header http.Header, body []byte) (ev Event, ok bool, err error)
+}
+
+// Constructor builds a Provider from its configuration, read via getenv.
+// It returns an error if required configuration is missing.
+type Constructor func(getenv func(string) string) (Provider, error)
+
+// Providers maps a provider name to its constructor.
+type Providers map[string]Constructor
+
+var (
+	// ErrInvalidSignature means a webhook wasn't sent by the provider.
+	ErrInvalidSignature = errors.New("payments: invalid webhook signature")
+	// ErrNotFound means no payment has the requested ID.
+	ErrNotFound = errors.New("payments: not found")
+)

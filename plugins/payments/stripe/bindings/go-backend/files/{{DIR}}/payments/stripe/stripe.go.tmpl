@@ -1,0 +1,223 @@
+// Package stripe implements payments.Provider with Stripe Checkout, calling
+// Stripe's HTTP API directly — no SDK, no extra dependencies.
+//
+// Configuration (environment):
+//
+//	STRIPE_SECRET_KEY      API secret key, sk_live_... or sk_test_...
+//	STRIPE_WEBHOOK_SECRET  signing secret of the webhook endpoint, whsec_...
+//	STRIPE_API_BASE        optional; another API base URL, e.g. stripe-mock
+//
+// In the Stripe dashboard, add a webhook endpoint at
+// https://<your domain>/api/payments/webhooks/stripe sending these events:
+// checkout.session.completed, checkout.session.async_payment_succeeded,
+// checkout.session.async_payment_failed and checkout.session.expired.
+package stripe
+
+import (
+	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
+	"time"
+
+	"{{MODULE_PATH}}/payments"
+)
+
+const (
+	defaultAPIBase = "https://api.stripe.com"
+	// apiVersion pins the shape of Stripe's responses, independent of the
+	// account's default version.
+	apiVersion = "2024-06-20"
+	// signatureTolerance is how old a webhook's signed timestamp may be,
+	// which bounds how long a captured webhook could be replayed.
+	signatureTolerance = 5 * time.Minute
+)
+
+// Provider is a payments.Provider backed by Stripe Checkout.
+type Provider struct {
+	secretKey     string
+	webhookSecret string
+	apiBase       string
+	client        *http.Client
+	now           func() time.Time
+}
+
+// New configures a Provider from the environment (see the package doc).
+func New(getenv func(string) string) (payments.Provider, error) {
+	p := &Provider{
+		secretKey:     getenv("STRIPE_SECRET_KEY"),
+		webhookSecret: getenv("STRIPE_WEBHOOK_SECRET"),
+		apiBase:       getenv("STRIPE_API_BASE"),
+		client:        &http.Client{Timeout: 30 * time.Second},
+		now:           time.Now,
+	}
+	if p.secretKey == "" || p.webhookSecret == "" {
+		return nil, errors.New("STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET must both be set")
+	}
+	if p.apiBase == "" {
+		p.apiBase = defaultAPIBase
+	}
+	return p, nil
+}
+
+// CreateCheckout creates a Checkout Session for one line item.
+func (p *Provider) CreateCheckout(ctx context.Context, req payments.CheckoutRequest) (payments.Checkout, error) {
+	name := req.Description
+	if name == "" {
+		name = "Payment"
+	}
+	form := url.Values{
+		"mode":                 {"payment"},
+		"success_url":          {req.SuccessURL},
+		"cancel_url":           {req.CancelURL},
+		"client_reference_id":  {req.PaymentID},
+		"metadata[payment_id]": {req.PaymentID},
+		"payment_intent_data[metadata][payment_id]":     {req.PaymentID},
+		"line_items[0][quantity]":                       {"1"},
+		"line_items[0][price_data][currency]":           {req.Currency},
+		"line_items[0][price_data][unit_amount]":        {strconv.FormatInt(req.AmountMinor, 10)},
+		"line_items[0][price_data][product_data][name]": {name},
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, p.apiBase+"/v1/checkout/sessions", strings.NewReader(form.Encode()))
+	if err != nil {
+		return payments.Checkout{}, err
+	}
+	httpReq.Header.Set("Authorization", "Bearer "+p.secretKey)
+	httpReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	httpReq.Header.Set("Stripe-Version", apiVersion)
+	// Retrying the same payment can never create a second session.
+	httpReq.Header.Set("Idempotency-Key", "checkout-"+req.PaymentID)
+
+	resp, err := p.client.Do(httpReq)
+	if err != nil {
+		return payments.Checkout{}, fmt.Errorf("stripe: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var body struct {
+		ID    string `json:"id"`
+		URL   string `json:"url"`
+		Error *struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return payments.Checkout{}, fmt.Errorf("stripe: decoding response (HTTP %d): %w", resp.StatusCode, err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		msg := resp.Status
+		if body.Error != nil {
+			msg = body.Error.Message
+		}
+		return payments.Checkout{}, fmt.Errorf("stripe: creating checkout session: %s", msg)
+	}
+	if body.ID == "" || body.URL == "" {
+		return payments.Checkout{}, errors.New("stripe: checkout session response has no id or url")
+	}
+	return payments.Checkout{ProviderRef: body.ID, URL: body.URL}, nil
+}
+
+// ParseWebhook verifies the Stripe-Signature header and maps Checkout
+// Session events to payment status changes.
+func (p *Provider) ParseWebhook(header http.Header, body []byte) (payments.Event, bool, error) {
+	if err := p.verify(header.Get("Stripe-Signature"), body); err != nil {
+		return payments.Event{}, false, err
+	}
+
+	var event struct {
+		Type string `json:"type"`
+		Data struct {
+			Object struct {
+				ID                string            `json:"id"`
+				Object            string            `json:"object"`
+				ClientReferenceID string            `json:"client_reference_id"`
+				PaymentStatus     string            `json:"payment_status"`
+				Metadata          map[string]string `json:"metadata"`
+			} `json:"object"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &event); err != nil {
+		return payments.Event{}, false, fmt.Errorf("stripe: decoding event: %w", err)
+	}
+	session := event.Data.Object
+	if session.Object != "checkout.session" {
+		return payments.Event{}, false, nil
+	}
+
+	var status payments.Status
+	switch event.Type {
+	case "checkout.session.completed":
+		// Card payments are paid on completion; delayed methods (bank
+		// debits) complete unpaid and report later via async_payment_*.
+		if session.PaymentStatus != "paid" && session.PaymentStatus != "no_payment_required" {
+			return payments.Event{}, false, nil
+		}
+		status = payments.StatusSucceeded
+	case "checkout.session.async_payment_succeeded":
+		status = payments.StatusSucceeded
+	case "checkout.session.async_payment_failed":
+		status = payments.StatusFailed
+	case "checkout.session.expired":
+		status = payments.StatusCanceled
+	default:
+		return payments.Event{}, false, nil
+	}
+
+	id := session.ClientReferenceID
+	if id == "" {
+		id = session.Metadata["payment_id"]
+	}
+	if id == "" {
+		return payments.Event{}, false, nil // a session this app didn't create
+	}
+	return payments.Event{PaymentID: id, ProviderRef: session.ID, Status: status}, true, nil
+}
+
+// verify checks a Stripe-Signature header ("t=<unix>,v1=<hex>[,v1=...]"):
+// an HMAC-SHA256 over "<t>.<body>" with the endpoint's signing secret,
+// signed recently enough.
+func (p *Provider) verify(header string, body []byte) error {
+	var timestamp string
+	var signatures []string
+	for _, part := range strings.Split(header, ",") {
+		k, v, _ := strings.Cut(strings.TrimSpace(part), "=")
+		switch k {
+		case "t":
+			timestamp = v
+		case "v1":
+			signatures = append(signatures, v)
+		}
+	}
+	if timestamp == "" || len(signatures) == 0 {
+		return fmt.Errorf("%w: malformed Stripe-Signature header", payments.ErrInvalidSignature)
+	}
+
+	t, err := strconv.ParseInt(timestamp, 10, 64)
+	if err != nil {
+		return fmt.Errorf("%w: bad timestamp", payments.ErrInvalidSignature)
+	}
+	if age := p.now().Sub(time.Unix(t, 0)); age > signatureTolerance || age < -signatureTolerance {
+		return fmt.Errorf("%w: timestamp outside tolerance", payments.ErrInvalidSignature)
+	}
+
+	mac := hmac.New(sha256.New, []byte(p.webhookSecret))
+	mac.Write([]byte(timestamp))
+	mac.Write([]byte("."))
+	mac.Write(body)
+	expected := mac.Sum(nil)
+	for _, sig := range signatures {
+		got, err := hex.DecodeString(sig)
+		if err == nil && hmac.Equal(got, expected) {
+			return nil
+		}
+	}
+	return payments.ErrInvalidSignature
+}

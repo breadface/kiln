@@ -5,6 +5,7 @@ GRPC_PORT={{GRPC_PORT}}
 DATABASE_URL=postgres://postgres:postgres@localhost:5432/{{APP_NAME}}?sslmode=disable
 JWT_SECRET=change-me-in-production
 CORS_ORIGINS=*
+# kiln:insert env
 
 # GRPC_PORT is internal only (the REST gateway dials it in process) —
 # never expose it outside the container/host, unlike PORT.
