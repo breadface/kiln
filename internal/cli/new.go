@@ -10,6 +10,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/breadface/kiln/contracts"
+	"github.com/breadface/kiln/internal/contract"
 	"github.com/breadface/kiln/internal/generate"
 	"github.com/breadface/kiln/internal/manifest"
 	"github.com/breadface/kiln/internal/plugin"
@@ -18,23 +20,29 @@ import (
 )
 
 type newOptions struct {
-	ProjectName   string
-	Backend       string
-	Hosting       string
-	Mobile        string
-	ModulePath    string
-	Domain        string
-	AdminEmail    string
-	GHCROwner     string
-	MobilePackage string
-	OutDir        string
-	Set           []string
-	Yes           bool
-	Force         bool
+	ProjectName string
+	// Plugins holds explicit selections from the per-Kind flags, e.g.
+	// --backend go-api.
+	Plugins map[plugin.Kind]string
+	// Values holds placeholder values from plugin-declared flags, e.g.
+	// --module sets MODULE_PATH. --set overrides these.
+	Values map[string]string
+	OutDir string
+	Set    []string
+	Yes    bool
+	Force  bool
+}
+
+// valueFlag is a CLI flag some plugin's placeholder declared.
+type valueFlag struct {
+	placeholder string
+	value       string
 }
 
 func newNewCmd() *cobra.Command {
 	opts := newOptions{}
+	kindFlags := map[plugin.Kind]*string{}
+	valueFlags := map[string]*valueFlag{}
 
 	cmd := &cobra.Command{
 		Use:   "new <project-name>",
@@ -42,19 +50,71 @@ func newNewCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			opts.ProjectName = args[0]
+			opts.Plugins = map[plugin.Kind]string{}
+			for k, v := range kindFlags {
+				if *v != "" {
+					opts.Plugins[k] = *v
+				}
+			}
+			opts.Values = map[string]string{}
+			for name, vf := range valueFlags {
+				if cmd.Flags().Changed(name) {
+					opts.Values[vf.placeholder] = vf.value
+				}
+			}
 			return runNew(cmd, opts)
 		},
 	}
 
 	f := cmd.Flags()
-	f.StringVar(&opts.Backend, "backend", "", "backend plugin to use (auto-selected if only one is available)")
-	f.StringVar(&opts.Hosting, "hosting", "", "hosting plugin to use (auto-selected if only one is available)")
-	f.StringVar(&opts.Mobile, "mobile", "", "mobile plugin to use (opt-in — omit to generate without a mobile client)")
-	f.StringVar(&opts.ModulePath, "module", "", "Go module path for the generated API")
-	f.StringVar(&opts.Domain, "domain", "", "primary domain the hosting plugin will serve")
-	f.StringVar(&opts.AdminEmail, "admin-email", "", "email Caddy uses for TLS certificate registration")
-	f.StringVar(&opts.GHCROwner, "ghcr-owner", "", "GHCR namespace to push images to (defaults to the module path's org)")
-	f.StringVar(&opts.MobilePackage, "mobile-package", "", "reverse-DNS package id for the mobile app, e.g. com.example.myapp")
+	all, err := plugin.NewEmbedLoader(plugins.FS).List("")
+	if err != nil {
+		// The embedded plugin set is fixed at build time, so this only
+		// happens with a broken plugin.yaml — which every test catches.
+		panic(fmt.Sprintf("loading embedded plugins: %v", err))
+	}
+
+	// One selection flag per Kind, listing what's available for it.
+	for _, k := range plugin.Kinds() {
+		var names []string
+		for _, p := range all {
+			if p.Manifest.Kind == k {
+				names = append(names, p.Manifest.Name)
+			}
+		}
+		usage := fmt.Sprintf("%s plugin to use", k)
+		if len(names) > 0 {
+			usage += " (" + strings.Join(names, ", ") + ")"
+		} else {
+			usage += " (none available yet)"
+		}
+		if generate.AutoSelects(k) {
+			usage += "; auto-selected if only one is available"
+		} else {
+			usage += "; opt-in"
+		}
+		kindFlags[k] = f.String(string(k), "", usage)
+	}
+
+	// One value flag per placeholder that asks for one. Two plugins may
+	// declare the same flag only for the same placeholder.
+	for _, p := range all {
+		for _, ph := range p.Manifest.Placeholders {
+			if ph.Flag == "" {
+				continue
+			}
+			if existing, ok := valueFlags[ph.Flag]; ok {
+				if existing.placeholder != ph.Name {
+					panic(fmt.Sprintf("plugin %s: flag --%s is already bound to %s, not %s", p.Ref(), ph.Flag, existing.placeholder, ph.Name))
+				}
+				continue
+			}
+			vf := &valueFlag{placeholder: ph.Name}
+			valueFlags[ph.Flag] = vf
+			f.StringVar(&vf.value, ph.Flag, "", fmt.Sprintf("%s (sets %s; used by %s)", ph.Description, ph.Name, p.Ref()))
+		}
+	}
+
 	f.StringVar(&opts.OutDir, "dir", ".", "parent directory to generate the project into")
 	f.StringArrayVar(&opts.Set, "set", nil, "set a placeholder value directly, KEY=VALUE (repeatable)")
 	f.BoolVar(&opts.Yes, "yes", false, "don't prompt; use flags/defaults, error if a required value is missing")
@@ -66,6 +126,10 @@ func newNewCmd() *cobra.Command {
 func runNew(cmd *cobra.Command, opts newOptions) error {
 	out := cmd.OutOrStdout()
 	loader := plugin.NewEmbedLoader(plugins.FS)
+	registry, err := contract.Load(contracts.FS)
+	if err != nil {
+		return err
+	}
 
 	req, err := requestFromOptions(opts)
 	if err != nil {
@@ -89,12 +153,16 @@ func runNew(cmd *cobra.Command, opts newOptions) error {
 	if err != nil {
 		return err
 	}
-
-	result, err := scaffold.Generate(scaffold.Options{Plugins: selected, Values: values})
+	bindings, values, err := generate.ResolveBindings(selected, registry, values)
 	if err != nil {
 		return err
 	}
-	manifestBytes, err := manifest.Marshal(generate.BuildManifest(Version, selected, values))
+
+	result, err := scaffold.Generate(scaffold.Options{Plugins: selected, Bindings: bindings, Values: values})
+	if err != nil {
+		return err
+	}
+	manifestBytes, err := manifest.Marshal(generate.BuildManifest(Version, selected, bindings, values))
 	if err != nil {
 		return err
 	}
@@ -112,16 +180,22 @@ func runNew(cmd *cobra.Command, opts newOptions) error {
 		return err
 	}
 
-	fmt.Fprintf(out, "\nGenerated %s\n\n", projectDir)
+	fmt.Fprintf(out, "\nGenerated %s from %d plugin(s), %d contract binding(s)\n\n", projectDir, len(selected), len(bindings))
 	fmt.Fprintln(out, "Next steps:")
 	fmt.Fprintf(out, "  cd %s\n", projectDir)
-	fmt.Fprintf(out, "  cp %s-api/.env.example %s-api/.env\n", appName, appName)
-	fmt.Fprintf(out, "  cd %s-api && make run\n", appName)
+	for _, p := range selected {
+		for _, step := range p.Manifest.NextSteps {
+			fmt.Fprintf(out, "  %s\n", scaffold.RenderString(step, values))
+		}
+	}
 	return nil
 }
 
 func requestFromOptions(opts newOptions) (generate.Request, error) {
 	set := map[string]string{}
+	for k, v := range opts.Values {
+		set[k] = v
+	}
 	for _, kv := range opts.Set {
 		k, v, ok := strings.Cut(kv, "=")
 		if !ok {
@@ -130,16 +204,9 @@ func requestFromOptions(opts newOptions) (generate.Request, error) {
 		set[strings.TrimSpace(k)] = strings.TrimSpace(v)
 	}
 	return generate.Request{
-		ProjectName:   opts.ProjectName,
-		Backend:       opts.Backend,
-		Hosting:       opts.Hosting,
-		Mobile:        opts.Mobile,
-		ModulePath:    opts.ModulePath,
-		Domain:        opts.Domain,
-		AdminEmail:    opts.AdminEmail,
-		GHCROwner:     opts.GHCROwner,
-		MobilePackage: opts.MobilePackage,
-		Set:           set,
+		ProjectName: opts.ProjectName,
+		Plugins:     opts.Plugins,
+		Set:         set,
 	}, nil
 }
 

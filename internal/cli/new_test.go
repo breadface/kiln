@@ -89,3 +89,18 @@ func TestCollectValuesPromptLeftBlankStillMissing(t *testing.T) {
 		t.Fatal("expected an error when the interactive prompt is left blank, got nil")
 	}
 }
+
+// TestNewFlagsComeFromPlugins guards that `kiln new` has no hardcoded
+// plugin knowledge: one selection flag per Kind (including kinds with no
+// plugins yet), and value flags only because a plugin declared them.
+func TestNewFlagsComeFromPlugins(t *testing.T) {
+	cmd := newNewCmd()
+	for _, name := range []string{"backend", "hosting", "mobile", "payments", "frontend", "glue", "module", "domain", "admin-email", "ghcr-owner", "mobile-package"} {
+		if cmd.Flags().Lookup(name) == nil {
+			t.Errorf("kiln new is missing --%s", name)
+		}
+	}
+	if usage := cmd.Flags().Lookup("module").Usage; !strings.Contains(usage, "MODULE_PATH") {
+		t.Errorf("--module usage %q should name the placeholder it sets", usage)
+	}
+}

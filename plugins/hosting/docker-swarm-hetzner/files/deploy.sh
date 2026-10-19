@@ -20,14 +20,10 @@ echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
 docker config inspect "caddyfile_$IMAGE_TAG" >/dev/null 2>&1 || \
 	docker config create "caddyfile_$IMAGE_TAG" ./Caddyfile
 
-echo "=== Running migrations ==="
-docker run --rm \
-	--env-file .env \
-	"ghcr.io/{{GHCR_OWNER}}/{{SERVICE_NAME}}:$IMAGE_TAG" \
-	./api-server -migrate
+# kiln:insert migrate
 
 echo "=== Deploying stack ==="
-{{SERVICE_NAME_UPPER}}_TAG=$IMAGE_TAG IMAGE_TAG=$IMAGE_TAG docker stack deploy \
+IMAGE_TAG=$IMAGE_TAG docker stack deploy \
 	--with-registry-auth \
 	--prune \
 	-c docker-compose.yml \

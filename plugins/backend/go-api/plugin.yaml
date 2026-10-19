@@ -1,6 +1,6 @@
 name: go-api
 kind: backend
-version: 0.1.0
+version: 0.2.0
 description: >-
   Minimal Go HTTP API starter: stdlib net/http routing, env-based config,
   Postgres via gorm, and a Connect/Migrate split for safe deploys.
@@ -9,9 +9,41 @@ placeholders:
   - name: MODULE_PATH
     description: "Go module path for the generated API, e.g. github.com/you/myapp-api"
     required: true
+    flag: module
+  - name: SERVICE_NAME
+    description: Service name — its container, image, and internal DNS name
+    default: "{{APP_NAME}}-api"
   - name: PORT
     description: HTTP port the API listens on
     default: "8080"
+
+provides:
+  - contract: http-service@1
+    with:
+      SERVICE_NAME: "{{SERVICE_NAME}}"
+      PORT: "{{PORT}}"
+      BUILD_CONTEXT: "{{APP_NAME}}-api"
+      HEALTH_PATH: /api/health
+  - contract: migration@1
+    with:
+      SERVICE_NAME: "{{SERVICE_NAME}}"
+      COMMAND: ./api-server -migrate
+  - contract: env@1
+    with:
+      ENV_NAME: DATABASE_URL
+      ENV_DESCRIPTION: Postgres connection string
+  - contract: env@1
+    with:
+      ENV_NAME: JWT_SECRET
+      ENV_DESCRIPTION: Secret used to sign auth tokens
+  - contract: env@1
+    with:
+      ENV_NAME: CORS_ORIGINS
+      ENV_DESCRIPTION: Comma-separated allowed CORS origins
+
+next_steps:
+  - cp {{APP_NAME}}-api/.env.example {{APP_NAME}}-api/.env
+  - cd {{APP_NAME}}-api && make run
 
 post_copy: hooks/post_copy.sh
 contributes_go_module: true

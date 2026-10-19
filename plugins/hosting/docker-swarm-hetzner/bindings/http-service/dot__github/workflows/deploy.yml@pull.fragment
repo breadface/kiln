@@ -1,0 +1,5 @@
+for i in 1 2 3 4 5; do
+  docker pull "ghcr.io/{{GHCR_OWNER}}/{{SERVICE_NAME}}:$IMAGE_TAG" && break
+  echo "pull attempt $i failed, retrying..."
+  sleep 5
+done

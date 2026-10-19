@@ -4,7 +4,8 @@
 #
 # docker stack deploy never builds images (Swarm only pulls them), so this
 # file adds `image:` per service rather than needing to remove `build:` —
-# the base file's `build:` key is simply ignored in Swarm mode.
+# the base file's `build:` key is simply ignored in Swarm mode. Every
+# service is tagged with the same IMAGE_TAG (the commit SHA being deployed).
 #
 # The caddy service picks up an *externally* created Swarm config here
 # (see deploy.sh) instead of relying only on the bind-mounted Caddyfile
@@ -15,16 +16,7 @@
 # bind mount's contents changing wouldn't trigger anything on its own.
 
 services:
-  {{SERVICE_NAME}}:
-    image: ghcr.io/{{GHCR_OWNER}}/{{SERVICE_NAME}}:${{{SERVICE_NAME_UPPER}}_TAG:-latest}
-    deploy:
-      replicas: 1
-      update_config:
-        order: start-first
-        failure_action: rollback
-        monitor: 30s
-      restart_policy:
-        condition: on-failure
+  # kiln:insert services
 
   caddy:
     configs:

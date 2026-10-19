@@ -6,31 +6,30 @@
 package generate
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
+	"github.com/breadface/kiln/internal/contract"
 	"github.com/breadface/kiln/internal/manifest"
 	"github.com/breadface/kiln/internal/plugin"
 	"github.com/breadface/kiln/internal/scaffold"
 )
 
 // Request is every value a caller (CLI flags/--set, or a web form) can
-// supply, independent of how it was collected.
+// supply, independent of how it was collected. It deliberately has no
+// plugin-specific fields: plugin selection is keyed by Kind, and every
+// value a plugin needs is a placeholder it declares itself.
 type Request struct {
-	ProjectName   string
-	Backend       string
-	Hosting       string
-	Mobile        string
-	ModulePath    string
-	Domain        string
-	AdminEmail    string
-	GHCROwner     string
-	MobilePackage string
-	// Set holds explicit placeholder overrides, keyed by placeholder name —
-	// the parsed form of the CLI's repeatable --set KEY=VALUE flag. Always
-	// wins over every other source.
+	ProjectName string
+	// Plugins holds explicit plugin selections, keyed by Kind — e.g.
+	// {backend: go-api, mobile: kmp-compose}.
+	Plugins map[plugin.Kind]string
+	// Set holds explicit placeholder values, keyed by placeholder name —
+	// from a plugin-declared CLI flag (e.g. --module) or --set KEY=VALUE.
 	Set map[string]string
 }
 
@@ -57,27 +56,29 @@ var autoSelectKinds = map[plugin.Kind]bool{
 	plugin.KindHosting: true,
 }
 
+// AutoSelects reports whether k is chosen automatically when exactly one
+// plugin of that kind is available.
+func AutoSelects(k plugin.Kind) bool {
+	return autoSelectKinds[k]
+}
+
 // SelectPlugins resolves one plugin per Kind: an explicit name (from
-// Backend/Hosting/Mobile) if given, otherwise — for auto-select kinds only
+// req.Plugins) if given, otherwise — for auto-select kinds only
 // — the sole available plugin of that kind, otherwise that kind is
 // skipped. More than one available plugin of a kind with no explicit
 // selection is an error asking to disambiguate — today's plugin set never
 // hits that case (every kind has at most one plugin), but the logic
 // doesn't need to change once more plugins exist.
 func SelectPlugins(loader plugin.Loader, req Request) ([]*plugin.Plugin, error) {
-	explicit := map[plugin.Kind]string{
-		plugin.KindBackend: req.Backend,
-		plugin.KindHosting: req.Hosting,
-		plugin.KindMobile:  req.Mobile,
-	}
-	kinds := []plugin.Kind{
-		plugin.KindBackend, plugin.KindFrontend, plugin.KindMobile,
-		plugin.KindPayments, plugin.KindHosting, plugin.KindGlue,
+	for k := range req.Plugins {
+		if !k.Known() {
+			return nil, fmt.Errorf("unknown plugin kind %q", k)
+		}
 	}
 
 	var selected []*plugin.Plugin
-	for _, k := range kinds {
-		if name := explicit[k]; name != "" {
+	for _, k := range plugin.Kinds() {
+		if name := req.Plugins[k]; name != "" {
 			p, err := loader.Resolve(k, name)
 			if err != nil {
 				return nil, err
@@ -143,7 +144,7 @@ func ValidateRequiresConflicts(selected []*plugin.Plugin) error {
 }
 
 func pluginRefStr(p *plugin.Plugin) string {
-	return string(p.Manifest.Kind) + "/" + p.Manifest.Name
+	return p.Ref()
 }
 
 // MissingValuesError reports required placeholders ResolveValues couldn't
@@ -163,45 +164,20 @@ func (e *MissingValuesError) Error() string {
 }
 
 // ResolveValues resolves every placeholder declared across the selected
-// plugins, without prompting: request fields and req.Set always win over a
-// manifest default. Anything required, still unset, and without a default
-// comes back as *MissingValuesError.
+// plugins, without prompting. APP_NAME is the only value Kiln itself
+// defines; everything else comes from, in priority order:
+//
+//  1. req.Set (explicit flags / --set),
+//  2. a placeholder's derive rule, once its source value is known,
+//  3. a placeholder's default, which may reference other placeholders
+//     (e.g. "{{APP_NAME}}-api") and resolves once they're known.
+//
+// Anything required and still unset comes back as *MissingValuesError.
 func ResolveValues(selected []*plugin.Plugin, req Request, appName string) (scaffold.Values, error) {
-	serviceName := appName + "-api"
-	values := scaffold.Values{
-		"APP_NAME":     appName,
-		"SERVICE_NAME": serviceName,
-		// Upper-snake form of SERVICE_NAME, e.g. "demoapp-api" -> "DEMOAPP_API" —
-		// used to build a per-service image-tag env var name like
-		// ${DEMOAPP_API_TAG:-latest}, matching afterknot's convention.
-		"SERVICE_NAME_UPPER": strings.ToUpper(strings.ReplaceAll(serviceName, "-", "_")),
-		"STACK_NAME":         appName,
-	}
-
-	named := map[string]string{
-		"MODULE_PATH":    req.ModulePath,
-		"DOMAIN":         req.Domain,
-		"ADMIN_EMAIL":    req.AdminEmail,
-		"GHCR_OWNER":     req.GHCROwner,
-		"MOBILE_PACKAGE": req.MobilePackage,
-	}
-	for k, v := range named {
-		if v != "" {
-			values[k] = v
-		}
-	}
-
+	values := scaffold.Values{"APP_NAME": appName}
 	for k, v := range req.Set {
 		if v != "" {
 			values[k] = v
-		}
-	}
-
-	// Convenience default: derive GHCR_OWNER from the module path's org
-	// segment (github.com/<owner>/...) before falling back to "missing".
-	if _, ok := values["GHCR_OWNER"]; !ok {
-		if owner := ghcrOwnerFromModule(values["MODULE_PATH"]); owner != "" {
-			values["GHCR_OWNER"] = owner
 		}
 	}
 
@@ -216,49 +192,178 @@ func ResolveValues(selected []*plugin.Plugin, req Request, appName string) (scaf
 		}
 	}
 
+	// Derived values and defaults can depend on each other in any order,
+	// so keep making passes until one resolves nothing new.
+	for changed := true; changed; {
+		changed = false
+		for _, name := range order {
+			if _, ok := values[name]; ok {
+				continue
+			}
+			ph := declared[name]
+			if v, ok, err := derive(ph, values); err != nil {
+				return nil, err
+			} else if ok {
+				values[name], changed = v, true
+				continue
+			}
+			if ph.Default != "" {
+				if v := scaffold.RenderString(ph.Default, values); !scaffold.HasUnresolved([]byte(v)) {
+					values[name], changed = v, true
+				}
+			}
+		}
+	}
+
+	// Required values are reported first: a default that depends on one
+	// will resolve once the caller supplies it (e.g. via a prompt).
 	var missing []plugin.Placeholder
+	var unresolvable string
 	for _, name := range order {
 		if _, ok := values[name]; ok {
 			continue
 		}
 		ph := declared[name]
-		if ph.Default != "" {
-			values[name] = ph.Default
-		} else if ph.Required {
+		switch {
+		case ph.Required:
 			missing = append(missing, ph)
+		case ph.Default != "" && unresolvable == "":
+			unresolvable = fmt.Sprintf("default for %s (%q) references a value that never resolved", name, ph.Default)
 		}
 	}
-
 	if len(missing) > 0 {
 		return nil, &MissingValuesError{Missing: missing}
 	}
-
-	// Kotlin package path segments for the mobile plugin, e.g.
-	// "com.example.demoapp" -> "com/example/demoapp" — used to build
-	// commonMain/kotlin/{{MOBILE_PACKAGE_PATH}}/App.kt-style paths.
-	// Computed only when MOBILE_PACKAGE actually resolved above (i.e. the
-	// mobile plugin was selected) — a no-op otherwise.
-	if pkg, ok := values["MOBILE_PACKAGE"]; ok {
-		values["MOBILE_PACKAGE_PATH"] = strings.ReplaceAll(pkg, ".", "/")
+	if unresolvable != "" {
+		return nil, errors.New(unresolvable)
 	}
-
 	return values, nil
 }
 
-func ghcrOwnerFromModule(modulePath string) string {
-	if modulePath == "" {
-		return ""
+// derive applies ph's Derive rule, if it has one and its source is known.
+func derive(ph plugin.Placeholder, values scaffold.Values) (string, bool, error) {
+	d := ph.Derive
+	if d == nil {
+		return "", false, nil
 	}
-	parts := strings.Split(modulePath, "/")
-	if len(parts) >= 2 && parts[0] == "github.com" {
-		return parts[1]
+	src, ok := values[d.From]
+	if !ok {
+		return "", false, nil
 	}
-	return ""
+	if d.Match != "" {
+		re, err := regexp.Compile(d.Match)
+		if err != nil {
+			return "", false, fmt.Errorf("placeholder %s: invalid derive.match: %w", ph.Name, err)
+		}
+		m := re.FindStringSubmatchIndex(src)
+		if m == nil {
+			return "", false, nil
+		}
+		return string(re.ExpandString(nil, d.Template, src, m)), true, nil
+	}
+	keys := make([]string, 0, len(d.Replace))
+	for k := range d.Replace {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys) // deterministic when replacements overlap
+	pairs := make([]string, 0, 2*len(keys))
+	for _, k := range keys {
+		pairs = append(pairs, k, d.Replace[k])
+	}
+	return strings.NewReplacer(pairs...).Replace(src), true, nil
+}
+
+// ResolveBindings connects every contract a selected plugin consumes to the
+// selected plugins providing it, and returns the bindings plus values
+// extended with each `as`-exported consume (e.g. API_PORT).
+//
+// Every provide is validated against its contract schema even when nothing
+// consumes it, so a broken plugin manifest fails fast regardless of what
+// it's combined with.
+func ResolveBindings(selected []*plugin.Plugin, registry *contract.Registry, values scaffold.Values) ([]plugin.Binding, scaffold.Values, error) {
+	type provided struct {
+		plugin *plugin.Plugin
+		values map[string]string
+	}
+	providers := map[string][]provided{}
+	for _, p := range selected {
+		for _, pr := range p.Manifest.Provides {
+			c, ok := registry.Get(pr.Contract)
+			if !ok {
+				return nil, nil, fmt.Errorf("plugin %s provides unknown contract %q", p.Ref(), pr.Contract)
+			}
+			rendered := map[string]string{}
+			for k, v := range pr.With {
+				r := scaffold.RenderString(v, values)
+				if scaffold.HasUnresolved([]byte(r)) {
+					return nil, nil, fmt.Errorf("plugin %s provides %s with %s=%q, which references an unresolved value", p.Ref(), pr.Contract, k, v)
+				}
+				rendered[k] = r
+			}
+			applied, err := c.Apply(rendered)
+			if err != nil {
+				return nil, nil, fmt.Errorf("plugin %s: %w", p.Ref(), err)
+			}
+			providers[pr.Contract] = append(providers[pr.Contract], provided{p, applied})
+		}
+	}
+
+	out := scaffold.Values{}
+	for k, v := range values {
+		out[k] = v
+	}
+
+	var bindings []plugin.Binding
+	for _, consumer := range selected {
+		for _, cn := range consumer.Manifest.Consumes {
+			c, ok := registry.Get(cn.Contract)
+			if !ok {
+				return nil, nil, fmt.Errorf("plugin %s consumes unknown contract %q", consumer.Ref(), cn.Contract)
+			}
+			if cn.As != "" && cn.Max != 1 {
+				return nil, nil, fmt.Errorf("plugin %s consumes %s as %s, which requires max: 1", consumer.Ref(), cn.Contract, cn.As)
+			}
+			bound := providers[cn.Contract]
+			if len(bound) < cn.Min {
+				return nil, nil, fmt.Errorf("plugin %s needs at least %d %s provider(s), but %s", consumer.Ref(), cn.Min, cn.Contract, describeProviders(bound))
+			}
+			if cn.Max > 0 && len(bound) > cn.Max {
+				return nil, nil, fmt.Errorf("plugin %s accepts at most %d %s provider(s), but %s", consumer.Ref(), cn.Max, cn.Contract, describeProviders(bound))
+			}
+			for _, b := range bound {
+				bindings = append(bindings, plugin.Binding{
+					Contract: c.ID(), Consumer: consumer, Provider: b.plugin, Values: b.values,
+				})
+				if cn.As == "" {
+					continue
+				}
+				for k, v := range b.values {
+					name := cn.As + "_" + k
+					if existing, ok := out[name]; ok && existing != v {
+						return nil, nil, fmt.Errorf("plugin %s exports %s=%q, but it's already %q", consumer.Ref(), name, v, existing)
+					}
+					out[name] = v
+				}
+			}
+		}
+	}
+	return bindings, out, nil
+}
+
+func describeProviders[T any](bound []T) string {
+	switch len(bound) {
+	case 0:
+		return "no selected plugin provides it"
+	case 1:
+		return "1 selected plugin provides it"
+	default:
+		return fmt.Sprintf("%d selected plugins provide it", len(bound))
+	}
 }
 
 // BuildManifest assembles the kiln.yaml payload for a generated project.
 // Serialization stays in internal/manifest.Marshal.
-func BuildManifest(kilnVersion string, selected []*plugin.Plugin, values scaffold.Values) manifest.Project {
+func BuildManifest(kilnVersion string, selected []*plugin.Plugin, bindings []plugin.Binding, values scaffold.Values) manifest.Project {
 	records := make([]manifest.PluginRecord, len(selected))
 	for i, p := range selected {
 		records[i] = manifest.PluginRecord{
@@ -268,11 +373,20 @@ func BuildManifest(kilnVersion string, selected []*plugin.Plugin, values scaffol
 			Source:  p.Source,
 		}
 	}
+	bindingRecords := make([]manifest.BindingRecord, len(bindings))
+	for i, b := range bindings {
+		bindingRecords[i] = manifest.BindingRecord{
+			Contract: b.Contract,
+			Consumer: b.Consumer.Ref(),
+			Provider: b.Provider.Ref(),
+			Values:   b.Values,
+		}
+	}
 	return manifest.Project{
 		KilnVersion: kilnVersion,
 		GeneratedAt: time.Now().UTC(),
-		Module:      values["MODULE_PATH"],
 		Plugins:     records,
+		Bindings:    bindingRecords,
 		Values:      values,
 	}
 }

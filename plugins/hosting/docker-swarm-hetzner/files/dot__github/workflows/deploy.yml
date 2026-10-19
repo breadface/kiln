@@ -21,15 +21,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: docker/build-push-action@v5
-        with:
-          context: ./{{APP_NAME}}-api
-          push: true
-          tags: |
-            ghcr.io/{{GHCR_OWNER}}/{{SERVICE_NAME}}:${{ github.sha }}
-            ghcr.io/{{GHCR_OWNER}}/{{SERVICE_NAME}}:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      # kiln:insert build
 
   deploy:
     needs: build
@@ -45,9 +37,7 @@ jobs:
             cd ~/{{STACK_NAME}}
 
             cat > .env <<'ENVEOF'
-            DATABASE_URL=${{ secrets.DATABASE_URL }}
-            JWT_SECRET=${{ secrets.JWT_SECRET }}
-            CORS_ORIGINS=${{ secrets.CORS_ORIGINS }}
+            # kiln:insert env
             ENVEOF
 
             docker swarm init >/dev/null 2>&1 || true
@@ -61,21 +51,13 @@ jobs:
 
             # Pull with retry — GHCR can take a moment to propagate a
             # freshly pushed image.
-            for i in 1 2 3 4 5; do
-              docker pull "ghcr.io/{{GHCR_OWNER}}/{{SERVICE_NAME}}:$IMAGE_TAG" && break
-              echo "pull attempt $i failed, retrying..."
-              sleep 5
-            done
+            # kiln:insert pull
 
-            echo "=== Running migrations ==="
-            docker run --rm \
-              --env-file .env \
-              "ghcr.io/{{GHCR_OWNER}}/{{SERVICE_NAME}}:$IMAGE_TAG" \
-              ./api-server -migrate
+            # kiln:insert migrate
 
             echo "=== Deploying stack ==="
             for i in 1 2 3; do
-              {{SERVICE_NAME_UPPER}}_TAG=$IMAGE_TAG IMAGE_TAG=$IMAGE_TAG docker stack deploy \
+              IMAGE_TAG=$IMAGE_TAG docker stack deploy \
                 --with-registry-auth \
                 --prune \
                 -c docker-compose.yml \
@@ -86,21 +68,6 @@ jobs:
             done
 
             echo "=== Verifying rollout ==="
-            service="{{STACK_NAME}}_{{SERVICE_NAME}}"
-            converged=""
-            for i in $(seq 1 20); do
-              states=$(docker service ps "$service" --filter "desired-state=running" --format '{{.CurrentState}}' 2>/dev/null || true)
-              if [ -n "$states" ] && ! echo "$states" | grep -qv '^Running'; then
-                converged=1
-                break
-              fi
-              sleep 3
-            done
-            if [ -z "$converged" ]; then
-              echo "rollout did not converge for $service in time" >&2
-              docker service ps "$service" || true
-              exit 1
-            fi
-            echo "rollout complete: $service"
+            # kiln:insert verify
 
             docker image prune -f

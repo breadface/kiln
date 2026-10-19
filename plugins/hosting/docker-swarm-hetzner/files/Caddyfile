@@ -4,4 +4,6 @@
 	# No init script, no reload hooks, no certbot. It just works.
 }
 
-# kiln:insert
+{{DOMAIN}} {
+	# kiln:insert routes
+}
