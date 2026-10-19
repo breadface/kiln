@@ -1,0 +1,31 @@
+name: go-backend
+version: 1
+description: >-
+  A Go HTTP backend that other plugins can extend with their own packages.
+  The provider promises these insert slots, and these names in scope at
+  each:
+
+    <DIR>/main.go, slot "imports" — inside main's import block. Add only
+      your own packages; main already imports log and net/http.
+    <DIR>/main.go, slot "migrate" — in the -migrate branch, after the
+      backend's own migration; in scope: conn *gorm.DB. Fail with
+      log.Fatalf.
+    <DIR>/main.go, slot "setup" — after configuration and the database
+      are ready, before the server starts; in scope: conn *gorm.DB, and
+      routes []func(*http.ServeMux), to which you append a function that
+      registers your HTTP handlers. Prefix any variables you declare with
+      your package name. Fail with log.Fatalf.
+    <DIR>/.env.example, slot "env" — your variables, commented with what
+      they are, for local development.
+
+  Code you add reads its own configuration from the environment.
+fields:
+  - name: SERVICE_NAME
+    description: The backend's http-service@2 / oci-image@1 service name.
+    required: true
+  - name: DIR
+    description: The Go module's directory, relative to the project root.
+    required: true
+  - name: MODULE_PATH
+    description: The Go module path; your packages are imported as <MODULE_PATH>/<path under DIR>.
+    required: true

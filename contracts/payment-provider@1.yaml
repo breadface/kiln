@@ -1,0 +1,15 @@
+name: payment-provider
+version: 1
+description: >-
+  A payment provider adapter (Stripe, Paystack, ...). The backend consuming
+  it generates its own payments package — the Provider interface, the
+  payments table, the HTTP endpoints, and a fake provider for local
+  development — makes PROVIDER the default in production, and leaves the
+  provider plugin to add only its adapter (in Go, through go-backend@1).
+fields:
+  - name: PROVIDER
+    description: >-
+      Lowercase identifier, used as the adapter's name in code, as the
+      PAYMENTS_PROVIDER value that selects it, and in its webhook URL
+      /api/payments/webhooks/<PROVIDER>.
+    required: true
