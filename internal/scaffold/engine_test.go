@@ -295,3 +295,40 @@ func TestGenerateBindingFragments(t *testing.T) {
 		t.Errorf(".ci/deploy.yml =\n%s\nwant\n%s", got, want)
 	}
 }
+
+// TestGenerateStructuredYAMLAnyPath covers <path>.fragment.yml targeting a
+// file other than docker-compose.yml: per-binding documents deep-merge
+// into one, on top of a base the plugin shipped in files/.
+func TestGenerateStructuredYAMLAnyPath(t *testing.T) {
+	runtime := &plugin.Plugin{
+		Manifest: plugin.Manifest{Name: "swarm", Kind: plugin.KindGlue},
+		FS: fstest.MapFS{
+			"files/deploy/stack.yml": &fstest.MapFile{Data: []byte("networks:\n  default:\n    driver: overlay\n")},
+			"bindings/oci-image/deploy/stack.fragment.yml": &fstest.MapFile{
+				Data: []byte("services:\n  {{SERVICE_NAME}}:\n    image: {{SERVICE_NAME}}:latest\n"),
+			},
+		},
+	}
+	api := &plugin.Plugin{Manifest: plugin.Manifest{Name: "api", Kind: plugin.KindBackend}, FS: fstest.MapFS{}}
+
+	result, err := Generate(Options{
+		Plugins: []*plugin.Plugin{api, runtime},
+		Bindings: []plugin.Binding{
+			{Contract: "oci-image@1", Consumer: runtime, Provider: api, Values: map[string]string{"SERVICE_NAME": "api"}},
+			{Contract: "oci-image@1", Consumer: runtime, Provider: api, Values: map[string]string{"SERVICE_NAME": "worker"}},
+		},
+		Values: Values{},
+	})
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	got := string(result.Files["deploy/stack.yml"].Content)
+	for _, want := range []string{"driver: overlay", "image: api:latest", "image: worker:latest"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("deploy/stack.yml missing %q:\n%s", want, got)
+		}
+	}
+	if !result.Files["deploy/stack.yml"].Merged {
+		t.Error("deploy/stack.yml should be marked Merged")
+	}
+}

@@ -7,7 +7,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func TestMergeComposeDisjointServices(t *testing.T) {
+func TestMergeYAMLDisjointServices(t *testing.T) {
 	api := []byte(`
 services:
   api:
@@ -21,9 +21,9 @@ services:
     ports: ["80:80", "443:443"]
 `)
 
-	out, err := MergeCompose([][]byte{api, caddy})
+	out, err := MergeYAML([][]byte{api, caddy})
 	if err != nil {
-		t.Fatalf("MergeCompose: %v", err)
+		t.Fatalf("MergeYAML: %v", err)
 	}
 
 	var doc map[string]interface{}
@@ -42,20 +42,20 @@ services:
 	}
 }
 
-func TestMergeComposeIdenticalDuplicateIsFine(t *testing.T) {
+func TestMergeYAMLIdenticalDuplicateIsFine(t *testing.T) {
 	a := []byte("services:\n  db:\n    image: postgres:15-alpine\n")
 	b := []byte("services:\n  db:\n    image: postgres:15-alpine\n")
 
-	if _, err := MergeCompose([][]byte{a, b}); err != nil {
+	if _, err := MergeYAML([][]byte{a, b}); err != nil {
 		t.Fatalf("identical duplicate keys should not conflict: %v", err)
 	}
 }
 
-func TestMergeComposeScalarCollision(t *testing.T) {
+func TestMergeYAMLScalarCollision(t *testing.T) {
 	a := []byte("services:\n  api:\n    image: demoapp-api:v1\n")
 	b := []byte("services:\n  api:\n    image: demoapp-api:v2\n")
 
-	_, err := MergeCompose([][]byte{a, b})
+	_, err := MergeYAML([][]byte{a, b})
 	if err == nil {
 		t.Fatal("expected a conflict error for differing values at the same key, got nil")
 	}
@@ -64,9 +64,9 @@ func TestMergeComposeScalarCollision(t *testing.T) {
 	}
 }
 
-func TestMergeComposeInvalidYAML(t *testing.T) {
+func TestMergeYAMLInvalidYAML(t *testing.T) {
 	bad := []byte("services: [this is not: a map")
-	if _, err := MergeCompose([][]byte{bad}); err == nil {
+	if _, err := MergeYAML([][]byte{bad}); err == nil {
 		t.Fatal("expected an error for invalid YAML fragment, got nil")
 	}
 }

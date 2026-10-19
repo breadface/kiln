@@ -10,30 +10,30 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// MergeCompose deep-merges a set of docker-compose fragment documents into
-// one Compose file. Two fragments defining the same key with the same value
+// MergeYAML deep-merges a set of YAML fragment documents (e.g. Compose
+// files) into one. Two fragments defining the same key with the same value
 // is fine (plugins are allowed to agree); two fragments defining the same
 // key with different values is a conflict, since neither plugin knows about
 // the other and Kiln can't guess which one should win.
-func MergeCompose(fragments [][]byte) ([]byte, error) {
+func MergeYAML(fragments [][]byte) ([]byte, error) {
 	merged := map[string]interface{}{}
 	for _, f := range fragments {
 		var doc map[string]interface{}
 		if err := yaml.Unmarshal(f, &doc); err != nil {
-			return nil, fmt.Errorf("parsing compose fragment: %w", err)
+			return nil, fmt.Errorf("parsing YAML fragment: %w", err)
 		}
-		if err := deepMergeCompose(merged, doc, ""); err != nil {
+		if err := deepMerge(merged, doc, ""); err != nil {
 			return nil, err
 		}
 	}
 	out, err := yaml.Marshal(merged)
 	if err != nil {
-		return nil, fmt.Errorf("marshaling merged compose: %w", err)
+		return nil, fmt.Errorf("marshaling merged YAML: %w", err)
 	}
 	return out, nil
 }
 
-func deepMergeCompose(dst, src map[string]interface{}, pathPrefix string) error {
+func deepMerge(dst, src map[string]interface{}, pathPrefix string) error {
 	for k, v := range src {
 		fullKey := k
 		if pathPrefix != "" {
@@ -49,7 +49,7 @@ func deepMergeCompose(dst, src map[string]interface{}, pathPrefix string) error 
 		em, eok := existing.(map[string]interface{})
 		sm, sok := v.(map[string]interface{})
 		if eok && sok {
-			if err := deepMergeCompose(em, sm, fullKey); err != nil {
+			if err := deepMerge(em, sm, fullKey); err != nil {
 				return err
 			}
 			continue
