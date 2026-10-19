@@ -12,6 +12,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/breadface/kiln/internal/manifest"
 	"github.com/breadface/kiln/internal/plugin"
 	"github.com/breadface/kiln/internal/scaffold"
 	"github.com/breadface/kiln/plugins"
@@ -293,5 +294,61 @@ func TestNewWithoutMobileFlagHasNoMobileDir(t *testing.T) {
 	}
 	if len(available) != 1 {
 		t.Fatalf("expected exactly one mobile plugin to be available, got %d", len(available))
+	}
+}
+
+// TestApplyEndToEnd drives `kiln new`, then `kiln apply` on the generated
+// project's own kiln.yaml into a second directory, through the real
+// commands — writing to disk and running post_copy hooks — and checks both
+// projects came out identical.
+//
+// It compares the two directories rather than kiln.yaml's hashes: those
+// record Kiln's own rendered output, and post_copy hooks (go mod tidy)
+// rewrite some files afterwards. TestApplyReproducesPlan covers the hashes.
+func TestApplyEndToEnd(t *testing.T) {
+	if testing.Short() {
+		t.Skip("post_copy hooks run go mod tidy over the network; skipped with -short")
+	}
+
+	first, second := t.TempDir(), t.TempDir()
+	run := func(args ...string) {
+		t.Helper()
+		root := newRootCmd()
+		buf := &bytes.Buffer{}
+		root.SetOut(buf)
+		root.SetArgs(args)
+		if err := root.Execute(); err != nil {
+			t.Fatalf("kiln %v: %v\n%s", args, err, buf.String())
+		}
+	}
+
+	run("new", "e2eapp",
+		"--backend", "go-api",
+		"--module", "github.com/example/e2eapp-api",
+		"--domain", "e2eapp.example.com",
+		"--admin-email", "admin@example.com",
+		"--dir", first, "--yes")
+	run("apply", filepath.Join(first, "e2eapp", "kiln.yaml"), "--dir", second)
+
+	m, err := manifest.Read(filepath.Join(first, "e2eapp"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(m.Files) == 0 {
+		t.Fatal("kiln.yaml records no file hashes")
+	}
+	for path := range m.Files {
+		want, err := os.ReadFile(filepath.Join(first, "e2eapp", filepath.FromSlash(path)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := os.ReadFile(filepath.Join(second, "e2eapp", filepath.FromSlash(path)))
+		if err != nil {
+			t.Errorf("apply did not produce %s: %v", path, err)
+			continue
+		}
+		if !bytes.Equal(got, want) {
+			t.Errorf("%s differs between `kiln new` and `kiln apply`", path)
+		}
 	}
 }

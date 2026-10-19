@@ -29,6 +29,10 @@ type Binding struct {
 	Consumer *Plugin
 	Provider *Plugin
 	Values   map[string]string
+	// Label is the value of the contract's first field — by convention
+	// the one that identifies a provider (e.g. SERVICE_NAME, ENV_NAME) —
+	// so bindings of the same contract can be told apart in output.
+	Label string
 }
 
 // Loader resolves plugins by kind and name. EmbedLoader is the only
