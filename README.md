@@ -68,10 +68,15 @@ languages, frontends, and payment providers are additive — see
 
 Each plugin declares a `plugin.yaml` manifest and ships a `files/` tree
 that's copied into the generated project (with `{{PLACEHOLDER}}` values
-substituted) plus an optional `fragments/` contribution to shared root files
-like `docker-compose.yml` and `Caddyfile` — since more than one plugin needs
-to add to those without knowing about each other. See
-[plugins/README.md](plugins/README.md) for the full format.
+substituted). Plugins never refer to each other: they meet at versioned
+**contracts** ([contracts/](contracts/README.md)) — a backend *provides*
+`http-service@1` and `env@1`, a hosting plugin *consumes* them and builds,
+deploys, routes and wires secrets for every provider, whichever plugins
+those are. Shared files like `docker-compose.yml`, `Caddyfile` or a CI
+workflow are extended through fragments inserted at named
+`# kiln:insert <slot>` markers. See [plugins/README.md](plugins/README.md)
+for the full format, and [RFC 0001](docs/rfcs/0001-composable-architecture.md)
+for where this is going.
 
 Plugins currently ship bundled inside the `kiln` binary itself. The design
 leaves room for plugins to move to independently-hosted repositories later

@@ -26,8 +26,8 @@ go run ./cmd/kiln new demoapp \
 
 ## Adding or changing a plugin
 
-See [plugins/README.md](plugins/README.md) for the manifest format, the
-`files/`/`fragments/` split, and the filename escapes required because
+See [plugins/README.md](plugins/README.md) for the manifest format,
+contracts, the `files/`/`fragments/`/`bindings/` split, and the filename escapes required because
 plugin content is embedded via `//go:embed` (`.tmpl` suffix, `dot__` prefix
 — read that section before adding a `.go` file or a dotfile to a plugin, or
 it will silently fail to embed).
@@ -35,7 +35,17 @@ it will silently fail to embed).
 After adding or changing plugin content, regenerate a project and check it
 by hand — `docker compose config` (and, for the hosting plugin,
 `docker compose -f docker-compose.yml -f docker-compose.swarm.yml config`)
-catches Compose schema and merge mistakes that a Go test won't.
+catches Compose schema and merge mistakes that a Go test won't. For the
+hosting plugin's other generated files:
+
+```sh
+docker run --rm -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2-alpine \
+  caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.7 .github/workflows/deploy.yml
+```
+
+To change a contract, read [contracts/README.md](contracts/README.md) first
+— contracts are versioned, and an incompatible change is a new version.
 
 For the mobile plugin specifically, the Go test suite only checks structural
 things (no leftover placeholders, the right directory layout, the
