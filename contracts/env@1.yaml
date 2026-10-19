@@ -1,0 +1,14 @@
+name: env
+version: 1
+description: >-
+  One environment variable the project needs at runtime. Hosting plugins
+  turn every env@1 into a secret or config entry in their own mechanism,
+  so a plugin that adds a variable (e.g. a payment provider's API key)
+  never has to edit the hosting plugin.
+fields:
+  - name: ENV_NAME
+    description: Variable name, e.g. DATABASE_URL.
+    required: true
+  - name: ENV_DESCRIPTION
+    description: What the value is and where to get it.
+    default: ""

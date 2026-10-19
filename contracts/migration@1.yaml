@@ -1,0 +1,13 @@
+name: migration
+version: 1
+description: >-
+  A one-off command run from a service's image before a new version is
+  rolled out, typically database schema migrations. Hosting plugins run
+  every migration before deploying.
+fields:
+  - name: SERVICE_NAME
+    description: The http-service whose image contains the command.
+    required: true
+  - name: COMMAND
+    description: Command run inside the image, with the project's environment.
+    required: true
