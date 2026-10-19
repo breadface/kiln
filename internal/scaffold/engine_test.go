@@ -332,3 +332,52 @@ func TestGenerateStructuredYAMLAnyPath(t *testing.T) {
 		t.Error("deploy/stack.yml should be marked Merged")
 	}
 }
+
+// TestGenerateBindingFiles covers bindings/<contract>/files/: whole files
+// rendered once per bound provider (here, into a directory the provider
+// names), which fragments can then target — and kept apart from
+// bindings/<contract>/'s fragments.
+func TestGenerateBindingFiles(t *testing.T) {
+	adapter := &plugin.Plugin{
+		Manifest: plugin.Manifest{Name: "stripe", Kind: plugin.KindPayments},
+		FS: fstest.MapFS{
+			"bindings/go-backend/files/{{DIR}}/payments/stripe/stripe.go.tmpl": &fstest.MapFile{
+				Data: []byte("package stripe // for {{MODULE_PATH}}\n"),
+			},
+			"bindings/go-backend/{{DIR}}/main.go@imports.fragment": &fstest.MapFile{
+				Data: []byte(`"{{MODULE_PATH}}/payments/stripe"` + "\n"),
+			},
+		},
+	}
+	backend := &plugin.Plugin{
+		Manifest: plugin.Manifest{Name: "go-api", Kind: plugin.KindBackend},
+		FS: fstest.MapFS{
+			"files/demo-api/main.go": &fstest.MapFile{Data: []byte("import (\n\t// kiln:insert imports\n)\n")},
+		},
+	}
+	binding := plugin.Binding{
+		Contract: "go-backend@1", Consumer: adapter, Provider: backend,
+		Values: map[string]string{"DIR": "demo-api", "MODULE_PATH": "example.com/demo"},
+	}
+
+	result, err := Generate(Options{Plugins: []*plugin.Plugin{backend, adapter}, Bindings: []plugin.Binding{binding}, Values: Values{}})
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	if got := string(result.Files["demo-api/payments/stripe/stripe.go"].Content); got != "package stripe // for example.com/demo\n" {
+		t.Errorf("binding file = %q", got)
+	}
+	if got := string(result.Files["demo-api/main.go"].Content); !strings.Contains(got, `"example.com/demo/payments/stripe"`) {
+		t.Errorf("fragment not merged into main.go:\n%s", got)
+	}
+	if _, ok := result.Files["files/demo-api/payments/stripe/stripe.go"]; ok {
+		t.Error("bindings/<contract>/files/ must not also be treated as fragments")
+	}
+
+	// Two bindings writing the same path with different content conflict.
+	other := binding
+	other.Values = map[string]string{"DIR": "demo-api", "MODULE_PATH": "example.com/other"}
+	if _, err := Generate(Options{Plugins: []*plugin.Plugin{backend, adapter}, Bindings: []plugin.Binding{binding, other}, Values: Values{}}); err == nil {
+		t.Error("expected a conflict when two bindings generate the same file differently")
+	}
+}

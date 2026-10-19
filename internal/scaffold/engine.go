@@ -1,6 +1,7 @@
 package scaffold
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -112,6 +113,9 @@ func Generate(opts Options) (Result, error) {
 			values[k] = v
 		}
 		root := path.Join("bindings", plugin.ContractName(b.Contract))
+		if err := copyFiles(b.Consumer.FS, path.Join(root, "files"), b.Consumer.Manifest.Executable, result.Files, values, true); err != nil {
+			return Result{}, fmt.Errorf("plugin %s: %w", b.Consumer.Ref(), err)
+		}
 		label := fmt.Sprintf("%s for %s (%s)", b.Consumer.Ref(), b.Provider.Ref(), b.Contract)
 		if err := collectFragments(b.Consumer.FS, root, label, values, frags); err != nil {
 			return Result{}, fmt.Errorf("plugin %s: %w", b.Consumer.Ref(), err)
@@ -206,36 +210,39 @@ func RunHooks(plugins []*plugin.Plugin, outDir string, values Values) error {
 }
 
 // copyPluginFiles renders everything under the plugin's files/ directory
-// and writes it into dst, keyed by its rendered, transformed relative path
-// (see transformPath), flagging executable ones per the plugin's
-// Executable globs.
+// into dst (see copyFiles).
 func copyPluginFiles(p *plugin.Plugin, dst map[string]GeneratedFile, values Values) error {
-	const root = "files"
+	return copyFiles(p.FS, "files", p.Manifest.Executable, dst, values, false)
+}
 
-	if _, err := fs.Stat(p.FS, root); err != nil {
+// copyFiles renders every file under root in fsys and writes it into dst,
+// keyed by its rendered, transformed relative path (see transformPath),
+// flagging ones matching an executable glob. With exclusive set, a path
+// already in dst with different content is a conflict rather than
+// overwritten — binding files come from one consumer per provider and must
+// never silently clobber each other.
+func copyFiles(fsys fs.FS, root string, executableGlobs []string, dst map[string]GeneratedFile, values Values, exclusive bool) error {
+	if _, err := fs.Stat(fsys, root); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil
 		}
 		return fmt.Errorf("stat %s: %w", root, err)
 	}
 
-	return fs.WalkDir(p.FS, root, func(fp string, d fs.DirEntry, err error) error {
+	return fs.WalkDir(fsys, root, func(fp string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || fp == root {
 			return err
 		}
-		rel, err := filepath.Rel(root, fp)
-		if err != nil {
-			return err
-		}
+		rel := strings.TrimPrefix(fp, root+"/")
 		renderedRel := transformPath(rel, values)
 
-		raw, err := fs.ReadFile(p.FS, fp)
+		raw, err := fs.ReadFile(fsys, fp)
 		if err != nil {
 			return fmt.Errorf("reading %s: %w", fp, err)
 		}
 
 		executable := false
-		for _, pattern := range p.Manifest.Executable {
+		for _, pattern := range executableGlobs {
 			matched, err := path.Match(pattern, renderedRel)
 			if err != nil {
 				return fmt.Errorf("invalid executable glob %q: %w", pattern, err)
@@ -246,7 +253,11 @@ func copyPluginFiles(p *plugin.Plugin, dst map[string]GeneratedFile, values Valu
 			}
 		}
 
-		dst[renderedRel] = GeneratedFile{Content: Render(raw, values), Executable: executable}
+		content := Render(raw, values)
+		if existing, ok := dst[renderedRel]; ok && exclusive && !bytes.Equal(existing.Content, content) {
+			return fmt.Errorf("%s: already generated with different content", renderedRel)
+		}
+		dst[renderedRel] = GeneratedFile{Content: content, Executable: executable}
 		return nil
 	})
 }
@@ -297,8 +308,16 @@ func collectFragments(fsys fs.FS, root, label string, values Values, frags *frag
 	}
 
 	return fs.WalkDir(fsys, root, func(fp string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
+		if err != nil {
 			return err
+		}
+		if d.IsDir() {
+			// A binding's whole files live in bindings/<contract>/files/,
+			// copied by copyFiles, not merged as fragments.
+			if fp == path.Join(root, "files") && strings.HasPrefix(root, "bindings/") {
+				return fs.SkipDir
+			}
+			return nil
 		}
 		rel := strings.TrimPrefix(fp, root+"/")
 		raw, err := fs.ReadFile(fsys, fp)
