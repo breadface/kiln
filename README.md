@@ -53,6 +53,15 @@ client (a single `composeApp` module plus a thin `iosApp` Xcode wrapper) that
 calls the generated API's real `GET /api/hello` over plain Ktor REST — no
 gRPC, no auth, nothing fake.
 
+### Payments
+
+Add one-time payments with `--payments stripe`. The backend gets a
+`payments` package — `POST /api/payments` to start a hosted checkout,
+`GET /api/payments/{id}`, and a signature-verified webhook endpoint — and
+the Stripe adapter plugs into it. Locally, `PAYMENTS_PROVIDER=fake` swaps
+in a checkout page served by the app itself, so the whole flow works with
+no Stripe account; production always uses Stripe.
+
 ### Plan, then apply
 
 `kiln plan` takes the same flags as `kiln new` and shows what it would
@@ -86,6 +95,7 @@ Early. Kiln currently ships these plugins, composed together by
 |---|---|
 | backend | `go-api`, `go-grpc-gateway` |
 | mobile | `kmp-compose` (opt-in) |
+| payments | `stripe` (opt-in) |
 | edge | `caddy` |
 | registry | `ghcr` |
 | runtime | `docker-swarm` |

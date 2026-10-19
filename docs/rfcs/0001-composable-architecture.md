@@ -1,6 +1,6 @@
 # RFC 0001: Kiln as a composer of independent plugins
 
-- Status: accepted; milestones 1–3 implemented
+- Status: accepted; milestones 1–4 implemented
 - Date: 2026-10-19
 
 ## Goal
@@ -114,13 +114,35 @@ Nix arrive), `layout` (monorepo vs polyrepo), `secrets` (CI secrets are the
 only store today), and allowing several plugins of one kind. Old Swarm
 configs accumulate on the server, one per deploy.
 
-### 4. Capabilities as runtime ports
+### 4. Capabilities as runtime ports — done for payments
 
-For each capability (payments, auth, email, storage, queue), the backend
-exposes a language-native interface and an extension slot (e.g. a generated
-`wiring.go` with a `// kiln:insert` marker); capability plugins provide
-adapters per language through a contract, and every capability ships a
-local/fake adapter. Payments first: a fake provider, then Stripe.
+Payments is the first capability, split as ports and adapters:
+
+- `payment-provider@1`: a provider plugin (`payments/stripe`) declares
+  itself; the backend then generates its own `payments` package from
+  `bindings/payment-provider/files/` — the `Provider` interface, the
+  payments table, `POST /api/payments`, `GET /api/payments/{id}`,
+  `POST /api/payments/webhooks/{provider}`, and a fake provider with its
+  own checkout page. Status only moves from pending to one final status
+  (a compare-and-swap in SQL), so redelivered and out-of-order webhooks
+  are harmless.
+- `go-backend@1`: a Go backend's extension slots (`main.go` imports,
+  migrate, setup with `routes`; `.env.example`). The Stripe plugin adds
+  only its adapter through it, written into the backend's directory via
+  `bindings/<contract>/files/` — Checkout Sessions over Stripe's HTTP API,
+  no SDK; webhook signatures verified with a 5-minute replay window.
+- Production defaults to the real provider and refuses to start without
+  its keys; the fake runs only with `PAYMENTS_PROVIDER=fake`.
+- Backends now pass every `env@1` into their container, so a provider's
+  keys reach production without touching the backend.
+
+Generated projects ship tests for the flow (the fake checkout end to end
+over HTTP, webhook handling, Stripe's request shape and signatures), and
+the smoke test runs the flow against a deployed stack and real Postgres.
+
+Not covered yet: subscriptions, refunds, a second provider (the real test
+of the port), and payments for non-Go backends. Next capabilities: auth,
+email, storage.
 
 ### 5. Conformance kit
 
