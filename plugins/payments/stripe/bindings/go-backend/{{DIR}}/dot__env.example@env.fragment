@@ -1,0 +1,5 @@
+# Stripe — only read when PAYMENTS_PROVIDER=stripe (or unset). Test-mode
+# keys: Dashboard → Developers. Forward webhooks locally with
+#   stripe listen --forward-to localhost:{{PORT}}/api/payments/webhooks/stripe
+STRIPE_SECRET_KEY=
+STRIPE_WEBHOOK_SECRET=

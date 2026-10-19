@@ -1,0 +1,153 @@
+package stripe
+
+import (
+	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"testing"
+	"time"
+
+	"{{MODULE_PATH}}/payments"
+)
+
+const testWebhookSecret = "whsec_test"
+
+func newTestProvider(t *testing.T, apiBase string) *Provider {
+	t.Helper()
+	p, err := New(func(k string) string {
+		return map[string]string{
+			"STRIPE_SECRET_KEY":     "sk_test_123",
+			"STRIPE_WEBHOOK_SECRET": testWebhookSecret,
+			"STRIPE_API_BASE":       apiBase,
+		}[k]
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p.(*Provider)
+}
+
+func TestNewRequiresKeys(t *testing.T) {
+	if _, err := New(func(string) string { return "" }); err == nil {
+		t.Fatal("expected an error without STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET")
+	}
+}
+
+func TestCreateCheckout(t *testing.T) {
+	var got url.Values
+	var header http.Header
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/v1/checkout/sessions" {
+			t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+		header = r.Header
+		body, _ := io.ReadAll(r.Body)
+		got, _ = url.ParseQuery(string(body))
+		fmt.Fprint(w, `{"id":"cs_test_1","url":"https://checkout.stripe.com/c/pay/cs_test_1"}`)
+	}))
+	defer api.Close()
+
+	co, err := newTestProvider(t, api.URL).CreateCheckout(context.Background(), payments.CheckoutRequest{
+		PaymentID: "pay_1", AmountMinor: 1500, Currency: "usd", Description: "Tea",
+		SuccessURL: "https://app.example.com/ok", CancelURL: "https://app.example.com/no",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if co.ProviderRef != "cs_test_1" || co.URL != "https://checkout.stripe.com/c/pay/cs_test_1" {
+		t.Errorf("checkout = %+v", co)
+	}
+
+	want := map[string]string{
+		"mode":                                          "payment",
+		"client_reference_id":                           "pay_1",
+		"line_items[0][price_data][unit_amount]":        "1500",
+		"line_items[0][price_data][currency]":           "usd",
+		"line_items[0][price_data][product_data][name]": "Tea",
+		"success_url":                                   "https://app.example.com/ok",
+	}
+	for k, v := range want {
+		if got.Get(k) != v {
+			t.Errorf("form %s = %q, want %q", k, got.Get(k), v)
+		}
+	}
+	if header.Get("Authorization") != "Bearer sk_test_123" || header.Get("Idempotency-Key") != "checkout-pay_1" {
+		t.Errorf("headers = %v", header)
+	}
+}
+
+func TestCreateCheckoutAPIError(t *testing.T) {
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprint(w, `{"error":{"message":"Invalid currency: xyz"}}`)
+	}))
+	defer api.Close()
+	_, err := newTestProvider(t, api.URL).CreateCheckout(context.Background(), payments.CheckoutRequest{PaymentID: "pay_1", AmountMinor: 1, Currency: "xyz"})
+	if err == nil {
+		t.Fatal("expected Stripe's error to surface")
+	}
+}
+
+func sign(t time.Time, body string, secret string) string {
+	ts := fmt.Sprint(t.Unix())
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(ts + "." + body))
+	return "t=" + ts + ",v1=" + hex.EncodeToString(mac.Sum(nil))
+}
+
+func event(typ, paymentStatus string) string {
+	return fmt.Sprintf(`{"type":%q,"data":{"object":{"id":"cs_test_1","object":"checkout.session","client_reference_id":"pay_1","payment_status":%q}}}`, typ, paymentStatus)
+}
+
+func TestParseWebhookSignature(t *testing.T) {
+	p := newTestProvider(t, "")
+	now := time.Now()
+	p.now = func() time.Time { return now }
+	body := event("checkout.session.completed", "paid")
+	header := func(sig string) http.Header { return http.Header{"Stripe-Signature": {sig}} }
+
+	if _, ok, err := p.ParseWebhook(header(sign(now, body, testWebhookSecret)), []byte(body)); err != nil || !ok {
+		t.Fatalf("valid signature rejected: ok=%v err=%v", ok, err)
+	}
+	cases := map[string]http.Header{
+		"wrong secret":   header(sign(now, body, "whsec_other")),
+		"tampered body":  header(sign(now, body+" ", testWebhookSecret)),
+		"replayed later": header(sign(now.Add(-10*time.Minute), body, testWebhookSecret)),
+		"missing":        {},
+	}
+	for name, h := range cases {
+		if _, _, err := p.ParseWebhook(h, []byte(body)); !errors.Is(err, payments.ErrInvalidSignature) {
+			t.Errorf("%s: err = %v, want ErrInvalidSignature", name, err)
+		}
+	}
+}
+
+func TestParseWebhookEvents(t *testing.T) {
+	p := newTestProvider(t, "")
+	cases := []struct {
+		typ, paymentStatus string
+		ok                 bool
+		want               payments.Status
+	}{
+		{"checkout.session.completed", "paid", true, payments.StatusSucceeded},
+		{"checkout.session.completed", "unpaid", false, ""}, // delayed method: wait for async_*
+		{"checkout.session.async_payment_succeeded", "paid", true, payments.StatusSucceeded},
+		{"checkout.session.async_payment_failed", "unpaid", true, payments.StatusFailed},
+		{"checkout.session.expired", "unpaid", true, payments.StatusCanceled},
+		{"customer.created", "", false, ""},
+	}
+	for _, c := range cases {
+		body := event(c.typ, c.paymentStatus)
+		ev, ok, err := p.ParseWebhook(http.Header{"Stripe-Signature": {sign(time.Now(), body, testWebhookSecret)}}, []byte(body))
+		if err != nil || ok != c.ok || (ok && (ev.Status != c.want || ev.PaymentID != "pay_1" || ev.ProviderRef != "cs_test_1")) {
+			t.Errorf("%s/%s: ev=%+v ok=%v err=%v, want ok=%v status=%s", c.typ, c.paymentStatus, ev, ok, err, c.ok, c.want)
+		}
+	}
+}

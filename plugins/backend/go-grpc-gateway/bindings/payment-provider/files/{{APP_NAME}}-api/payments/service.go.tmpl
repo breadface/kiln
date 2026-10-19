@@ -1,0 +1,213 @@
+package payments
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"log"
+	"net/url"
+	"os"
+	"sort"
+	"strings"
+
+	"gorm.io/gorm"
+)
+
+// Service creates payments and applies provider events to them.
+type Service struct {
+	store    store
+	name     string
+	provider Provider
+}
+
+// New returns a Service using the provider named by PAYMENTS_PROVIDER
+// (default DefaultProvider), chosen from available.
+func New(db *gorm.DB, available Providers) (*Service, error) {
+	return newService(gormStore{db}, available, os.Getenv)
+}
+
+func newService(st store, available Providers, getenv func(string) string) (*Service, error) {
+	name := getenv("PAYMENTS_PROVIDER")
+	if name == "" {
+		name = DefaultProvider
+	}
+	if name == fakeName {
+		log.Println("warning: PAYMENTS_PROVIDER=fake — payments go through a local checkout page anyone can mark paid; never use this in production")
+		return &Service{store: st, name: name, provider: fakeProvider{}}, nil
+	}
+
+	ctor, ok := available[name]
+	if !ok {
+		names := []string{fakeName}
+		for n := range available {
+			names = append(names, n)
+		}
+		sort.Strings(names)
+		return nil, fmt.Errorf("payments: unknown PAYMENTS_PROVIDER %q (available: %s)", name, strings.Join(names, ", "))
+	}
+	p, err := ctor(getenv)
+	if err != nil {
+		return nil, fmt.Errorf("payments: configuring %s: %w", name, err)
+	}
+	return &Service{store: st, name: name, provider: p}, nil
+}
+
+// Migrate creates or updates the payments table.
+func Migrate(db *gorm.DB) error {
+	return db.AutoMigrate(&Payment{})
+}
+
+// NewPayment is a payment to create.
+type NewPayment struct {
+	AmountMinor int64  `json:"amount"`   // smallest currency unit, e.g. cents
+	Currency    string `json:"currency"` // ISO 4217, e.g. "usd"
+	Description string `json:"description"`
+	SuccessURL  string `json:"success_url"` // where the customer lands after paying
+	CancelURL   string `json:"cancel_url"`  // where they land if they back out
+}
+
+// ValidationError reports a NewPayment that can't be created.
+type ValidationError struct{ msg string }
+
+func (e *ValidationError) Error() string { return e.msg }
+
+func (n NewPayment) validate() error {
+	switch {
+	case n.AmountMinor <= 0:
+		return &ValidationError{"amount must be a positive number of minor units"}
+	case len(n.Currency) != 3:
+		return &ValidationError{"currency must be a 3-letter ISO 4217 code"}
+	case !absoluteHTTPURL(n.SuccessURL):
+		return &ValidationError{"success_url must be an absolute http(s) URL"}
+	case !absoluteHTTPURL(n.CancelURL):
+		return &ValidationError{"cancel_url must be an absolute http(s) URL"}
+	}
+	return nil
+}
+
+func absoluteHTTPURL(s string) bool {
+	u, err := url.Parse(s)
+	return err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != ""
+}
+
+// Create records a pending payment and starts its hosted checkout. Send the
+// customer to the returned payment's CheckoutURL.
+func (s *Service) Create(ctx context.Context, n NewPayment) (Payment, error) {
+	if err := n.validate(); err != nil {
+		return Payment{}, err
+	}
+	p := Payment{
+		ID:          newID(),
+		Provider:    s.name,
+		AmountMinor: n.AmountMinor,
+		Currency:    strings.ToLower(n.Currency),
+		Description: n.Description,
+		Status:      StatusPending,
+		SuccessURL:  n.SuccessURL,
+		CancelURL:   n.CancelURL,
+	}
+	if err := s.store.create(ctx, &p); err != nil {
+		return Payment{}, err
+	}
+
+	co, err := s.provider.CreateCheckout(ctx, CheckoutRequest{
+		PaymentID:   p.ID,
+		AmountMinor: p.AmountMinor,
+		Currency:    p.Currency,
+		Description: p.Description,
+		SuccessURL:  p.SuccessURL,
+		CancelURL:   p.CancelURL,
+	})
+	if err != nil {
+		if _, ferr := s.store.transition(ctx, p.ID, StatusFailed); ferr != nil {
+			log.Printf("payments: marking %s failed: %v", p.ID, ferr)
+		}
+		return Payment{}, fmt.Errorf("payments: starting checkout: %w", err)
+	}
+	p.ProviderRef, p.CheckoutURL = co.ProviderRef, co.URL
+	if err := s.store.setCheckout(ctx, p.ID, co); err != nil {
+		return Payment{}, err
+	}
+	return p, nil
+}
+
+// Get returns a payment by ID, or ErrNotFound.
+func (s *Service) Get(ctx context.Context, id string) (Payment, error) {
+	return s.store.get(ctx, id)
+}
+
+// apply records a provider event. A payment's status only ever moves from
+// pending to one final status, so redelivered and out-of-order webhooks
+// are harmless: the first final status wins and later ones are ignored.
+func (s *Service) apply(ctx context.Context, ev Event) error {
+	if ev.Status == StatusPending {
+		return nil
+	}
+	p, err := s.store.get(ctx, ev.PaymentID)
+	if err != nil {
+		return err
+	}
+	if p.Provider != s.name {
+		return fmt.Errorf("payments: %s belongs to provider %s, event came from %s", p.ID, p.Provider, s.name)
+	}
+	if p.ProviderRef != "" && ev.ProviderRef != "" && p.ProviderRef != ev.ProviderRef {
+		return fmt.Errorf("payments: %s has provider ref %s, event reports %s", p.ID, p.ProviderRef, ev.ProviderRef)
+	}
+	changed, err := s.store.transition(ctx, p.ID, ev.Status)
+	if err != nil {
+		return err
+	}
+	if changed {
+		log.Printf("payments: %s %s", p.ID, ev.Status)
+	}
+	return nil
+}
+
+func newID() string {
+	b := make([]byte, 12)
+	if _, err := rand.Read(b); err != nil {
+		panic(err) // crypto/rand never fails on supported platforms
+	}
+	return "pay_" + hex.EncodeToString(b)
+}
+
+// store is the persistence Service needs; gormStore is the real one.
+type store interface {
+	create(ctx context.Context, p *Payment) error
+	get(ctx context.Context, id string) (Payment, error)
+	setCheckout(ctx context.Context, id string, co Checkout) error
+	// transition moves a pending payment to status, reporting whether it
+	// changed anything — false if the payment was already final.
+	transition(ctx context.Context, id string, status Status) (bool, error)
+}
+
+type gormStore struct{ db *gorm.DB }
+
+func (g gormStore) create(ctx context.Context, p *Payment) error {
+	return g.db.WithContext(ctx).Create(p).Error
+}
+
+func (g gormStore) get(ctx context.Context, id string) (Payment, error) {
+	var p Payment
+	err := g.db.WithContext(ctx).First(&p, "id = ?", id).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return Payment{}, ErrNotFound
+	}
+	return p, err
+}
+
+func (g gormStore) setCheckout(ctx context.Context, id string, co Checkout) error {
+	return g.db.WithContext(ctx).Model(&Payment{}).Where("id = ?", id).
+		Updates(map[string]any{"provider_ref": co.ProviderRef, "checkout_url": co.URL}).Error
+}
+
+func (g gormStore) transition(ctx context.Context, id string, status Status) (bool, error) {
+	// The status condition makes this a compare-and-swap: concurrent
+	// webhooks for one payment can't both apply.
+	res := g.db.WithContext(ctx).Model(&Payment{}).
+		Where("id = ? AND status = ?", id, StatusPending).
+		Update("status", status)
+	return res.RowsAffected == 1, res.Error
+}

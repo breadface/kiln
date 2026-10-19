@@ -1,0 +1,3 @@
+# Payments: "fake" serves a local checkout page so you can test without a
+# {{PROVIDER}} account. Leave unset in production, where it defaults to {{PROVIDER}}.
+PAYMENTS_PROVIDER=fake

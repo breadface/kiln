@@ -1,0 +1,93 @@
+package payments
+
+import (
+	"context"
+	"errors"
+	"html/template"
+	"log"
+	"net/http"
+)
+
+const fakeName = "fake"
+
+// fakeProvider stands in for a real provider in local development and
+// tests: its "hosted checkout" is a page this app serves, with buttons to
+// make the payment succeed or fail. Anyone who can reach that page can
+// mark a payment paid, so it only runs when PAYMENTS_PROVIDER=fake is set
+// explicitly — never by default.
+type fakeProvider struct{}
+
+func (fakeProvider) CreateCheckout(_ context.Context, req CheckoutRequest) (Checkout, error) {
+	return Checkout{
+		ProviderRef: "fake_" + req.PaymentID,
+		URL:         "/api/payments/fake/checkout/" + req.PaymentID,
+	}, nil
+}
+
+// ParseWebhook: the fake reports outcomes from its own checkout page, not
+// by webhook.
+func (fakeProvider) ParseWebhook(http.Header, []byte) (Event, bool, error) {
+	return Event{}, false, nil
+}
+
+func (s *Service) fakeRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("GET /api/payments/fake/checkout/{id}", s.handleFakeCheckout)
+	mux.HandleFunc("POST /api/payments/fake/checkout/{id}", s.handleFakeComplete)
+}
+
+var fakeCheckoutPage = template.Must(template.New("checkout").Parse(`<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fake checkout</title>
+<style>body{font:16px system-ui,sans-serif;max-width:28rem;margin:4rem auto;padding:0 1rem}button{font:inherit;padding:.5rem 1rem;margin-right:.5rem}</style>
+<h1>Fake checkout</h1>
+<p>Local development only (<code>PAYMENTS_PROVIDER=fake</code>). No money moves.</p>
+<p><strong>{{.Description}}</strong><br>{{.AmountMinor}} {{.Currency}} (minor units)</p>
+<form method="post">
+<button name="result" value="succeeded">Pay</button>
+<button name="result" value="failed">Fail</button>
+<button name="result" value="canceled">Cancel</button>
+</form>`))
+
+func (s *Service) handleFakeCheckout(w http.ResponseWriter, r *http.Request) {
+	p, err := s.Get(r.Context(), r.PathValue("id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_ = fakeCheckoutPage.Execute(w, p)
+}
+
+// handleFakeComplete plays the provider's part: report the outcome, then
+// send the customer back to the app, exactly as a real checkout would.
+func (s *Service) handleFakeComplete(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	status := Status(r.FormValue("result"))
+	switch status {
+	case StatusSucceeded, StatusFailed, StatusCanceled:
+	default:
+		writeError(w, http.StatusBadRequest, "result must be succeeded, failed or canceled")
+		return
+	}
+	err := s.apply(r.Context(), Event{PaymentID: id, ProviderRef: "fake_" + id, Status: status})
+	if errors.Is(err, ErrNotFound) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		log.Printf("payments: fake checkout: %v", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	p, err := s.Get(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	target := p.CancelURL
+	if p.Status == StatusSucceeded {
+		target = p.SuccessURL
+	}
+	http.Redirect(w, r, target, http.StatusSeeOther)
+}

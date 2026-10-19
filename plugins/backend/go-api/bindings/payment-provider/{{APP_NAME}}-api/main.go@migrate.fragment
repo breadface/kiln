@@ -1,0 +1,3 @@
+if err := payments.Migrate(conn); err != nil {
+	log.Fatalf("migrating payments: %v", err)
+}

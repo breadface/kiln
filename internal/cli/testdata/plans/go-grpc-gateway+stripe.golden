@@ -1,0 +1,609 @@
+Plugins
+  backend/go-grpc-gateway  0.4.0
+  payments/stripe          0.1.0
+  edge/caddy               0.1.0
+  registry/ghcr            0.1.0
+  runtime/docker-swarm     0.1.0
+  ci/github-actions        0.1.0
+
+Bindings
+  env@1               DATABASE_URL           backend/go-grpc-gateway -> backend/go-grpc-gateway
+  env@1               JWT_SECRET             backend/go-grpc-gateway -> backend/go-grpc-gateway
+  env@1               CORS_ORIGINS           backend/go-grpc-gateway -> backend/go-grpc-gateway
+  env@1               STRIPE_SECRET_KEY      payments/stripe -> backend/go-grpc-gateway
+  env@1               STRIPE_WEBHOOK_SECRET  payments/stripe -> backend/go-grpc-gateway
+  env@1               PAYMENTS_PROVIDER      payments/stripe -> backend/go-grpc-gateway
+  payment-provider@1  stripe                 payments/stripe -> backend/go-grpc-gateway
+  go-backend@1        demo-api               backend/go-grpc-gateway -> payments/stripe
+  http-service@2      demo-api               backend/go-grpc-gateway -> edge/caddy
+  oci-image@1         demo-api               backend/go-grpc-gateway -> runtime/docker-swarm
+  migration@1         demo-api               backend/go-grpc-gateway -> runtime/docker-swarm
+  config-file@1       caddyfile              edge/caddy -> runtime/docker-swarm
+  image-registry@1    ghcr.io                registry/ghcr -> runtime/docker-swarm
+  oci-image@1         demo-api               backend/go-grpc-gateway -> ci/github-actions
+  env@1               DATABASE_URL           backend/go-grpc-gateway -> ci/github-actions
+  env@1               JWT_SECRET             backend/go-grpc-gateway -> ci/github-actions
+  env@1               CORS_ORIGINS           backend/go-grpc-gateway -> ci/github-actions
+  env@1               STRIPE_SECRET_KEY      payments/stripe -> ci/github-actions
+  env@1               STRIPE_WEBHOOK_SECRET  payments/stripe -> ci/github-actions
+  env@1               PAYMENTS_PROVIDER      payments/stripe -> ci/github-actions
+  deploy-secret@1     DEPLOY_HOST            runtime/docker-swarm -> ci/github-actions
+  deploy-secret@1     DEPLOY_USER            runtime/docker-swarm -> ci/github-actions
+  deploy-secret@1     DEPLOY_SSH_KEY         runtime/docker-swarm -> ci/github-actions
+  deploy-secret@1     DEPLOY_KNOWN_HOSTS     runtime/docker-swarm -> ci/github-actions
+  deploy-target@1     ./deploy.sh            runtime/docker-swarm -> ci/github-actions
+  image-registry@1    ghcr.io                registry/ghcr -> ci/github-actions
+
+Values
+  ADMIN_EMAIL               admin@example.com
+  APP_NAME                  demo
+  DEPLOY_COMMAND            ./deploy.sh
+  DOMAIN                    demo.example.com
+  GHCR_OWNER                example
+  GHCR_USERNAME             example
+  GRPC_PORT                 9090
+  MODULE_PATH               github.com/example/demo-api
+  PORT                      8080
+  REGISTRY_HOST             ghcr.io
+  REGISTRY_NAMESPACE        example
+  REGISTRY_PASSWORD_SECRET  GHCR_TOKEN
+  REGISTRY_USERNAME         example
+  SERVICE_NAME              demo-api
+  STACK_NAME                demo
+
+Files (31)
+  .github/DEPLOY.md
+  .github/workflows/deploy.yml
+  Caddyfile
+  buf.gen.yaml
+  buf.yaml
+  demo-api/.env.example
+  demo-api/Dockerfile
+  demo-api/Makefile
+  demo-api/config/config.go
+  demo-api/db/db.go
+  demo-api/dotenv/dotenv.go
+  demo-api/go.mod
+  demo-api/go.sum
+  demo-api/main.go
+  demo-api/payments/adapters/adapters.go
+  demo-api/payments/fake.go
+  demo-api/payments/http.go
+  demo-api/payments/payments.go
+  demo-api/payments/service.go
+  demo-api/payments/service_test.go
+  demo-api/payments/stripe/stripe.go
+  demo-api/payments/stripe/stripe_test.go
+  demo-api/proto/pb/greeter/greeter.pb.go
+  demo-api/proto/pb/greeter/greeter.pb.gw.go
+  demo-api/proto/pb/greeter/greeter_grpc.pb.go
+  demo-api/server/greeter.go
+  deploy.sh (executable)
+  docker-compose.swarm.yml
+  docker-compose.yml
+  kiln.yaml
+  proto/greeter/greeter.proto
+
+Hashes
+  sha256:bf4190d9bd05e133b05a8602806e50b4837ad55e4a7374f427d136be0a21e4df  .github/DEPLOY.md
+  sha256:867b7a6d92db9969358523eee8c9f3bdb95102f035045bb1af273855589e4b72  .github/workflows/deploy.yml
+  sha256:17e17be298d4258f00e04190185c63a3dc250574e9234910ddf802b8f850abcf  Caddyfile
+  sha256:24a8ed6e69346a8c79da35967ac913b2b8a10010088b87ccbc5b965544613ebd  buf.gen.yaml
+  sha256:68c60b5e3e4cec391a9a96736a357d7df6bd8f57a50b1468af0f836587a0ec16  buf.yaml
+  sha256:81262228715ee324b981a5ff8bd87cc1815cabd3b5232c752da851e0707f1204  demo-api/.env.example
+  sha256:e7edb8a1226911ad03e8c3e311559176dcd1cb6228923d2a75e532d54f022a37  demo-api/Dockerfile
+  sha256:281ffcdbc6dde83168be83a389362bd1074f43cc5d8240725bfa72557a5b6bcf  demo-api/Makefile
+  sha256:792536e410427eac4a5c7ff81ce3f3befc9dd5f0739c68e4a74f6d7e22b2ec8d  demo-api/config/config.go
+  sha256:6b8b46943d26fbcf7b87f1d445c2946bcf0b794228870200405022e81fd933ac  demo-api/db/db.go
+  sha256:5554c4aeedde221acf697b63866ce2a47616f53951ea7880c4523ec5c5843f9f  demo-api/dotenv/dotenv.go
+  sha256:d534dd3436a6174fc5fd04ab9f41845a5e14cfa5cd6be8c2b475d3522615b488  demo-api/go.mod
+  sha256:154a51445a47f54ac0ea4753c59589d0b90a0f0e2904146786e7566eb8916649  demo-api/go.sum
+  sha256:af5cbe0995999e1298eceb1f4ec292b4ca2dce16e324cd4f4d08d1bfa0927456  demo-api/main.go
+  sha256:1bc860db75548dea339aa396a65ed6f93a7479a7e33a130f4813ddf0543e84d9  demo-api/payments/adapters/adapters.go
+  sha256:4f15031c823cbc6b15251610236aea31b5ea958bd1843d887d58d014ee188642  demo-api/payments/fake.go
+  sha256:8df1763e32910800a2e8802ad1eafd667aac639a464223e99f1685f2cf9532da  demo-api/payments/http.go
+  sha256:a6a22672574999264b6055aec96eed05fde1b742ef933a664af52dd2311fcdff  demo-api/payments/payments.go
+  sha256:2ecc8a1a9833282a1cea71fff4013bac89d46986e1a0e4983fbc050a7724f4aa  demo-api/payments/service.go
+  sha256:3ec4ce683e820d2e238fcf103ab76a056f5e07b731683b86cb6c49b6ec720419  demo-api/payments/service_test.go
+  sha256:68f8d1633538707dd4721971313ec47ff44af9e9d700bc6e1561696e980fea6e  demo-api/payments/stripe/stripe.go
+  sha256:5b8e59ae16aa94d66376f2f49a8ea2fab4c41d7727c375d1a27d7a55ee6acc3c  demo-api/payments/stripe/stripe_test.go
+  sha256:0015da8eb648845efcf86e8d3ac221d3725884267bc6070e0965b784e12d24d9  demo-api/proto/pb/greeter/greeter.pb.go
+  sha256:3bfe0530805c73f852b2c7185f45a3bf8d70fd89a291fb60c791b1e8c8a1e001  demo-api/proto/pb/greeter/greeter.pb.gw.go
+  sha256:22a36341e397987ca6e927417ea91140fddaee7a7ee463cdcdf449457543421a  demo-api/proto/pb/greeter/greeter_grpc.pb.go
+  sha256:70c72b7d394c03d0ab4ada2179814dcfc6146262750c7c6afed0354c86a6f212  demo-api/server/greeter.go
+  sha256:600f0fff7ae9992ab345c68e90eeb0e1ec87358994d6711be3a0dbccd80d1c6e  deploy.sh
+  sha256:823d431a0b23eb2f0f79d57a7c648fb38c25b6ed9b03526a1fad5d29f2f50689  docker-compose.swarm.yml
+  sha256:1d1e39f7dd0de8e45e0aea5f461fc2bd4c829fe753fb6cb69384a918bf8b0a41  docker-compose.yml
+  sha256:78f2f1a8ca87317041e2dc6ea5a1a19c256a7478d04f23b098a553f5b9512589  proto/greeter/greeter.proto
+
+==> .github/DEPLOY.md <==
+# Deploying demo
+
+The **Deploy** workflow (`.github/workflows/deploy.yml`) builds every image,
+pushes it to `ghcr.io/example`, writes the
+application's environment to `.env`, and runs `./deploy.sh`. Start it
+from the repository's **Actions** tab → **Deploy** → **Run workflow**.
+
+## Repository secrets
+
+Add these under **Settings → Secrets and variables → Actions**.
+
+### Image registry
+
+- `GHCR_TOKEN` — a token that can push and pull images on
+  `ghcr.io` as `example`.
+
+### Deploy
+
+<!-- --- ci/github-actions for runtime/docker-swarm (deploy-secret@1) --- -->
+- `DEPLOY_HOST` — Hostname or IP of the swarm manager.
+<!-- --- ci/github-actions for runtime/docker-swarm (deploy-secret@1) --- -->
+- `DEPLOY_USER` — SSH user on DEPLOY_HOST that can run docker. Optional; defaults to root.
+<!-- --- ci/github-actions for runtime/docker-swarm (deploy-secret@1) --- -->
+- `DEPLOY_SSH_KEY` — Private SSH key for DEPLOY_USER.
+<!-- --- ci/github-actions for runtime/docker-swarm (deploy-secret@1) --- -->
+- `DEPLOY_KNOWN_HOSTS` — DEPLOY_HOST's known_hosts line(s), from `ssh-keyscan DEPLOY_HOST`. Optional, but without it the host key is trusted on first use.
+
+### Application environment
+
+Written to `.env` on every deploy.
+
+<!-- --- ci/github-actions for backend/go-grpc-gateway (env@1) --- -->
+- `DATABASE_URL` — Postgres connection string
+<!-- --- ci/github-actions for backend/go-grpc-gateway (env@1) --- -->
+- `JWT_SECRET` — Secret used to sign auth tokens
+<!-- --- ci/github-actions for backend/go-grpc-gateway (env@1) --- -->
+- `CORS_ORIGINS` — Comma-separated allowed CORS origins
+<!-- --- ci/github-actions for payments/stripe (env@1) --- -->
+- `STRIPE_SECRET_KEY` — Stripe secret API key (sk_live_... in production), from Dashboard → Developers → API keys
+<!-- --- ci/github-actions for payments/stripe (env@1) --- -->
+- `STRIPE_WEBHOOK_SECRET` — Signing secret (whsec_...) of the webhook endpoint https://<your domain>/api/payments/webhooks/stripe, from Dashboard → Developers → Webhooks
+<!-- --- ci/github-actions for payments/stripe (env@1) --- -->
+- `PAYMENTS_PROVIDER` — Leave unset in production (it defaults to stripe). "fake" switches to a local checkout page anyone can mark paid — development only.
+
+==> .github/workflows/deploy.yml <==
+name: Deploy
+
+on:
+  workflow_dispatch:
+
+# Never cancel a deploy halfway through; queue the next one instead.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: example
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      # --- ci/github-actions for backend/go-grpc-gateway (oci-image@1) ---
+      - uses: docker/build-push-action@v5
+        with:
+          context: ./demo-api
+          file: ./demo-api/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/example/demo-api:${{ github.sha }}
+            ghcr.io/example/demo-api:latest
+          cache-from: type=gha,scope=demo-api
+          cache-to: type=gha,mode=max,scope=demo-api
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: example
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      # Secrets arrive as environment variables, never pasted into the
+      # script, so their values can't break or inject into it.
+      - name: Write .env
+        env:
+          ENV_FILE: .env
+          # --- ci/github-actions for backend/go-grpc-gateway (env@1) ---
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          # --- ci/github-actions for backend/go-grpc-gateway (env@1) ---
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          # --- ci/github-actions for backend/go-grpc-gateway (env@1) ---
+          CORS_ORIGINS: ${{ secrets.CORS_ORIGINS }}
+          # --- ci/github-actions for payments/stripe (env@1) ---
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          # --- ci/github-actions for payments/stripe (env@1) ---
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          # --- ci/github-actions for payments/stripe (env@1) ---
+          PAYMENTS_PROVIDER: ${{ secrets.PAYMENTS_PROVIDER }}
+        run: |
+          {
+            : # valid even when nothing provides env@1
+            # --- ci/github-actions for backend/go-grpc-gateway (env@1) ---
+            printf '%s=%s\n' DATABASE_URL "$DATABASE_URL"
+            # --- ci/github-actions for backend/go-grpc-gateway (env@1) ---
+            printf '%s=%s\n' JWT_SECRET "$JWT_SECRET"
+            # --- ci/github-actions for backend/go-grpc-gateway (env@1) ---
+            printf '%s=%s\n' CORS_ORIGINS "$CORS_ORIGINS"
+            # --- ci/github-actions for payments/stripe (env@1) ---
+            printf '%s=%s\n' STRIPE_SECRET_KEY "$STRIPE_SECRET_KEY"
+            # --- ci/github-actions for payments/stripe (env@1) ---
+            printf '%s=%s\n' STRIPE_WEBHOOK_SECRET "$STRIPE_WEBHOOK_SECRET"
+            # --- ci/github-actions for payments/stripe (env@1) ---
+            printf '%s=%s\n' PAYMENTS_PROVIDER "$PAYMENTS_PROVIDER"
+          } >"$ENV_FILE"
+
+      - name: Deploy
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+          # --- ci/github-actions for runtime/docker-swarm (deploy-secret@1) ---
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          # --- ci/github-actions for runtime/docker-swarm (deploy-secret@1) ---
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          # --- ci/github-actions for runtime/docker-swarm (deploy-secret@1) ---
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          # --- ci/github-actions for runtime/docker-swarm (deploy-secret@1) ---
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: ./deploy.sh
+
+==> Caddyfile <==
+{
+	email admin@example.com
+	# Caddy stores certs in the caddy_data volume — persisted across restarts.
+	# No init script, no reload hooks, no certbot. It just works.
+}
+
+demo.example.com {
+	# --- edge/caddy for backend/go-grpc-gateway (http-service@2) ---
+	handle /* {
+		reverse_proxy demo-api:8080 {
+			header_up X-Forwarded-For {remote_host}
+		}
+	}
+}
+
+==> buf.gen.yaml <==
+version: v2
+managed:
+  enabled: false
+plugins:
+  # --- backend/go-grpc-gateway ---
+    - remote: buf.build/protocolbuffers/go
+      out: demo-api/proto/pb
+      opt:
+        - paths=source_relative
+    - remote: buf.build/grpc/go
+      out: demo-api/proto/pb
+      opt:
+        - paths=source_relative
+    - remote: buf.build/grpc-ecosystem/gateway
+      out: demo-api/proto/pb
+      opt:
+        - paths=source_relative
+
+==> demo-api/.env.example <==
+# Copy to .env and fill in real values before running locally.
+
+PORT=8080
+GRPC_PORT=9090
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/demo?sslmode=disable
+JWT_SECRET=change-me-in-production
+CORS_ORIGINS=*
+# --- backend/go-grpc-gateway for payments/stripe (payment-provider@1) ---
+# Payments: "fake" serves a local checkout page so you can test without a
+# stripe account. Leave unset in production, where it defaults to stripe.
+PAYMENTS_PROVIDER=fake
+# --- payments/stripe for backend/go-grpc-gateway (go-backend@1) ---
+# Stripe — only read when PAYMENTS_PROVIDER=stripe (or unset). Test-mode
+# keys: Dashboard → Developers. Forward webhooks locally with
+#   stripe listen --forward-to localhost:8080/api/payments/webhooks/stripe
+STRIPE_SECRET_KEY=
+STRIPE_WEBHOOK_SECRET=
+
+# GRPC_PORT is internal only (the REST gateway dials it in process) —
+# never expose it outside the container/host, unlike PORT.
+#
+# Postgres is assumed to be externally managed (a local install, or a
+# managed provider) — this project doesn't run Postgres itself, locally or
+# in production. Point DATABASE_URL above at whichever instance you use.
+
+==> demo-api/main.go <==
+// Command demo-api is the gRPC + REST gateway API entrypoint.
+package main
+
+import (
+	"context"
+	"flag"
+	"log"
+	"net"
+	"net/http"
+
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+
+	"github.com/example/demo-api/config"
+	"github.com/example/demo-api/db"
+	greeterv1 "github.com/example/demo-api/proto/pb/greeter"
+	"github.com/example/demo-api/server"
+	// --- backend/go-grpc-gateway for payments/stripe (payment-provider@1) ---
+	"github.com/example/demo-api/payments"
+	"github.com/example/demo-api/payments/adapters"
+)
+
+func main() {
+	migrate := flag.Bool("migrate", false, "run database migrations and exit")
+	flag.Parse()
+
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("loading config: %v", err)
+	}
+
+	conn, err := db.Connect(cfg.DatabaseURL)
+	if err != nil {
+		log.Fatalf("connecting to database: %v", err)
+	}
+
+	if *migrate {
+		if err := db.Migrate(conn); err != nil {
+			log.Fatalf("migrating: %v", err)
+		}
+		// --- backend/go-grpc-gateway for payments/stripe (payment-provider@1) ---
+		if err := payments.Migrate(conn); err != nil {
+			log.Fatalf("migrating payments: %v", err)
+		}
+		log.Println("migrations complete")
+		return
+	}
+
+	// Plugins append functions here that register their own HTTP handlers
+	// alongside the gateway, e.g. webhooks that need the raw request.
+	var routes []func(*http.ServeMux)
+	// --- backend/go-grpc-gateway for payments/stripe (payment-provider@1) ---
+	paymentsService, err := payments.New(conn, adapters.All)
+	if err != nil {
+		log.Fatalf("payments: %v", err)
+	}
+	routes = append(routes, paymentsService.Routes)
+
+	grpcServer := grpc.NewServer()
+	greeterv1.RegisterGreeterServer(grpcServer, server.NewGreeterServer(conn))
+
+	grpcLis, err := net.Listen("tcp", ":"+cfg.GRPCPort)
+	if err != nil {
+		log.Fatalf("listening on grpc port: %v", err)
+	}
+	go func() {
+		log.Printf("grpc listening on :%s (internal)", cfg.GRPCPort)
+		if err := grpcServer.Serve(grpcLis); err != nil {
+			log.Fatalf("grpc server error: %v", err)
+		}
+	}()
+
+	gwConn, err := grpc.NewClient("localhost:"+cfg.GRPCPort, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Fatalf("dialing grpc server: %v", err)
+	}
+
+	gwmux := runtime.NewServeMux()
+	if err := greeterv1.RegisterGreeterHandler(context.Background(), gwmux, gwConn); err != nil {
+		log.Fatalf("registering gateway handler: %v", err)
+	}
+
+	log.Printf("gateway listening on :%s", cfg.Port)
+	if err := http.ListenAndServe(":"+cfg.Port, server.WrapGateway(gwmux, cfg.CORSOrigins, routes...)); err != nil {
+		log.Fatalf("gateway server error: %v", err)
+	}
+}
+
+==> demo-api/payments/adapters/adapters.go <==
+// Package adapters lists the payment providers compiled into this app.
+// Provider plugins add themselves here; the fake provider is built into
+// package payments.
+package adapters
+
+import (
+	"github.com/example/demo-api/payments"
+	// --- payments/stripe for backend/go-grpc-gateway (go-backend@1) ---
+	"github.com/example/demo-api/payments/stripe"
+)
+
+// All is every provider PAYMENTS_PROVIDER can select.
+var All = payments.Providers{
+	// --- payments/stripe for backend/go-grpc-gateway (go-backend@1) ---
+	"stripe": stripe.New,
+}
+
+==> deploy.sh <==
+#!/usr/bin/env bash
+# Deploys this project as the Docker Swarm stack "demo". Runs
+# anywhere — CI or your machine — and talks to the swarm manager's Docker
+# over SSH using the files in this repository, so nothing needs copying to
+# the server first.
+#
+# Environment:
+#   DEPLOY_HOST         swarm manager hostname or IP (required unless DOCKER_HOST is set)
+#   DEPLOY_USER         SSH user there that can run docker (default: root)
+#   DEPLOY_SSH_KEY      private key to log in with (default: your SSH agent/config)
+#   DEPLOY_KNOWN_HOSTS  known_hosts line(s) for DEPLOY_HOST (default: trust on first use)
+#   IMAGE_TAG           image tag to deploy (default: latest). Use a unique tag per
+#                       deploy, e.g. a commit SHA — config files are versioned by it.
+#   DOCKER_HOST         set instead of DEPLOY_HOST to target any Docker daemon directly
+#
+# Also needed: a .env file here with the application's runtime variables
+# (NAME=value lines, values unquoted), and docker logged in to
+# ghcr.io, e.g.:
+#   echo "$GHCR_TOKEN" | docker login ghcr.io -u example --password-stdin
+#
+# Usage:
+#   DEPLOY_HOST=203.0.113.10 IMAGE_TAG=abc1234 ./deploy.sh
+
+set -euo pipefail
+cd "$(dirname "$0")"
+
+export IMAGE_TAG=${IMAGE_TAG:-latest}
+
+if [ -z "${DOCKER_HOST:-}" ]; then
+	: "${DEPLOY_HOST:?set DEPLOY_HOST (or DOCKER_HOST)}"
+	if [ -n "${DEPLOY_SSH_KEY:-}" ]; then
+		eval "$(ssh-agent -s)" >/dev/null
+		trap 'ssh-agent -k >/dev/null' EXIT
+		printf '%s\n' "$DEPLOY_SSH_KEY" | ssh-add - >/dev/null 2>&1
+	fi
+	mkdir -p ~/.ssh && chmod 700 ~/.ssh
+	if [ -n "${DEPLOY_KNOWN_HOSTS:-}" ]; then
+		printf '%s\n' "$DEPLOY_KNOWN_HOSTS" >>~/.ssh/known_hosts
+	elif ! ssh-keygen -F "$DEPLOY_HOST" >/dev/null 2>&1; then
+		echo "warning: trusting $DEPLOY_HOST's SSH host key on first use; set DEPLOY_KNOWN_HOSTS to pin it" >&2
+		ssh-keyscan -H "$DEPLOY_HOST" >>~/.ssh/known_hosts 2>/dev/null
+	fi
+	export DOCKER_HOST="ssh://${DEPLOY_USER:-root}@$DEPLOY_HOST"
+fi
+
+# Export .env for ${VAR} interpolation in the compose files: unlike
+# `docker compose`, `docker stack deploy` doesn't read .env itself. Lines
+# are taken literally (no shell evaluation), the same way --env-file does.
+if [ -f .env ]; then
+	while IFS= read -r line || [ -n "$line" ]; do
+		case "$line" in '' | '#'*) continue ;; esac
+		export "${line%%=*}=${line#*=}"
+	done <.env
+fi
+
+docker swarm init >/dev/null 2>&1 || true
+
+# Pull with retry — a registry can take a moment to serve a freshly
+# pushed image.
+# --- runtime/docker-swarm for backend/go-grpc-gateway (oci-image@1) ---
+for i in 1 2 3 4 5; do
+	docker pull "ghcr.io/example/demo-api:$IMAGE_TAG" && break
+	if [ "$i" = 5 ]; then exit 1; fi
+	echo "pull attempt $i failed, retrying..."
+	sleep 5
+done
+
+# --- runtime/docker-swarm for backend/go-grpc-gateway (migration@1) ---
+echo "=== Running migrations: demo-api ==="
+docker run --rm \
+	--env-file .env \
+	"ghcr.io/example/demo-api:$IMAGE_TAG" \
+	./api-server -migrate
+
+echo "=== Deploying stack demo ($IMAGE_TAG) ==="
+for i in 1 2 3; do
+	docker stack deploy \
+		--with-registry-auth \
+		--prune \
+		-c docker-compose.yml \
+		-c docker-compose.swarm.yml \
+		demo && break
+	if [ "$i" = 3 ]; then exit 1; fi
+	echo "stack deploy attempt $i failed, retrying..."
+	sleep 5
+done
+
+echo "=== Verifying rollout ==="
+# --- runtime/docker-swarm for backend/go-grpc-gateway (oci-image@1) ---
+service="demo_demo-api"
+converged=""
+for i in $(seq 1 20); do
+	states=$(docker service ps "$service" --filter "desired-state=running" --format '{{.CurrentState}}' 2>/dev/null || true)
+	if [ -n "$states" ] && ! echo "$states" | grep -qv '^Running'; then
+		converged=1
+		break
+	fi
+	sleep 3
+done
+if [ -z "$converged" ]; then
+	echo "rollout did not converge for $service in time" >&2
+	docker service ps "$service" || true
+	exit 1
+fi
+echo "rollout complete: $service"
+
+docker image prune -f >/dev/null
+echo "=== Done ==="
+
+==> docker-compose.swarm.yml <==
+# Generated by kiln from plugins: backend/go-grpc-gateway, payments/stripe, edge/caddy, registry/ghcr, runtime/docker-swarm, ci/github-actions
+configs:
+    caddyfile:
+        file: ./Caddyfile
+        name: demo_caddyfile_${IMAGE_TAG:-latest}
+networks:
+    default:
+        attachable: true
+        driver: overlay
+services:
+    demo-api:
+        deploy:
+            replicas: 1
+            restart_policy:
+                condition: on-failure
+            update_config:
+                failure_action: rollback
+                monitor: 30s
+                order: start-first
+        image: ghcr.io/example/demo-api:${IMAGE_TAG:-latest}
+
+==> docker-compose.yml <==
+# Generated by kiln from plugins: backend/go-grpc-gateway, payments/stripe, edge/caddy, registry/ghcr, runtime/docker-swarm, ci/github-actions
+configs:
+    caddyfile:
+        file: ./Caddyfile
+services:
+    caddy:
+        configs:
+            - source: caddyfile
+              target: /etc/caddy/Caddyfile
+        image: caddy:2-alpine
+        ports:
+            - 80:80
+            - 443:443
+        restart: always
+        volumes:
+            - caddy_data:/data
+            - caddy_config:/config
+    demo-api:
+        build:
+            context: ./demo-api
+            dockerfile: Dockerfile
+        container_name: demo-api
+        dns:
+            - 8.8.8.8
+            - 1.1.1.1
+        environment:
+            CORS_ORIGINS: ${CORS_ORIGINS:-*}
+            DATABASE_URL: ${DATABASE_URL:-}
+            GRPC_PORT: "9090"
+            JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+            PAYMENTS_PROVIDER: ${PAYMENTS_PROVIDER:-}
+            STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+            STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+        expose:
+            - "8080"
+        healthcheck:
+            interval: 30s
+            retries: 3
+            test:
+                - CMD
+                - wget
+                - -qO-
+                - http://localhost:8080/api/health
+            timeout: 5s
+        restart: on-failure
+volumes:
+    caddy_config: {}
+    caddy_data: {}

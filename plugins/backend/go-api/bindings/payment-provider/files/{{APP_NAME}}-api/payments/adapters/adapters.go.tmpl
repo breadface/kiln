@@ -1,0 +1,14 @@
+// Package adapters lists the payment providers compiled into this app.
+// Provider plugins add themselves here; the fake provider is built into
+// package payments.
+package adapters
+
+import (
+	"{{MODULE_PATH}}/payments"
+	// kiln:insert imports
+)
+
+// All is every provider PAYMENTS_PROVIDER can select.
+var All = payments.Providers{
+	// kiln:insert providers
+}

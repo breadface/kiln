@@ -1,0 +1,225 @@
+package payments
+
+import (
+	"context"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strings"
+	"sync"
+	"testing"
+)
+
+// memStore is an in-memory store, so the payment flow is tested without a
+// database. gormStore's compare-and-swap is the one thing it can't cover.
+type memStore struct {
+	mu       sync.Mutex
+	payments map[string]Payment
+}
+
+func newMemStore() *memStore { return &memStore{payments: map[string]Payment{}} }
+
+func (m *memStore) create(_ context.Context, p *Payment) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.payments[p.ID] = *p
+	return nil
+}
+
+func (m *memStore) get(_ context.Context, id string) (Payment, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	p, ok := m.payments[id]
+	if !ok {
+		return Payment{}, ErrNotFound
+	}
+	return p, nil
+}
+
+func (m *memStore) setCheckout(_ context.Context, id string, co Checkout) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	p := m.payments[id]
+	p.ProviderRef, p.CheckoutURL = co.ProviderRef, co.URL
+	m.payments[id] = p
+	return nil
+}
+
+func (m *memStore) transition(_ context.Context, id string, status Status) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	p, ok := m.payments[id]
+	if !ok || p.Status != StatusPending {
+		return false, nil
+	}
+	p.Status = status
+	m.payments[id] = p
+	return true, nil
+}
+
+func env(vars map[string]string) func(string) string {
+	return func(k string) string { return vars[k] }
+}
+
+var validPayment = NewPayment{
+	AmountMinor: 1500, Currency: "USD", Description: "Test",
+	SuccessURL: "https://app.example.com/ok", CancelURL: "https://app.example.com/cancel",
+}
+
+func TestDefaultProviderIsNeverFake(t *testing.T) {
+	if DefaultProvider == fakeName {
+		t.Fatal("DefaultProvider must be a real provider, so production can't fall back to the fake")
+	}
+	if _, err := newService(newMemStore(), Providers{}, env(nil)); err == nil {
+		t.Fatalf("expected an error when the default provider %q isn't compiled in", DefaultProvider)
+	}
+}
+
+func TestProviderConfigErrorsFailStartup(t *testing.T) {
+	broken := Providers{"broken": func(func(string) string) (Provider, error) { return nil, errors.New("missing key") }}
+	if _, err := newService(newMemStore(), broken, env(map[string]string{"PAYMENTS_PROVIDER": "broken"})); err == nil {
+		t.Fatal("expected a provider's configuration error to fail startup")
+	}
+}
+
+func TestValidation(t *testing.T) {
+	svc, _ := newService(newMemStore(), nil, env(map[string]string{"PAYMENTS_PROVIDER": "fake"}))
+	bad := map[string]func(*NewPayment){
+		"zero amount":      func(n *NewPayment) { n.AmountMinor = 0 },
+		"bad currency":     func(n *NewPayment) { n.Currency = "dollars" },
+		"relative success": func(n *NewPayment) { n.SuccessURL = "/ok" },
+		"javascript url":   func(n *NewPayment) { n.CancelURL = "javascript:alert(1)" },
+	}
+	for name, mutate := range bad {
+		n := validPayment
+		mutate(&n)
+		var verr *ValidationError
+		if _, err := svc.Create(context.Background(), n); !errors.As(err, &verr) {
+			t.Errorf("%s: err = %v, want a ValidationError", name, err)
+		}
+	}
+}
+
+// TestFakeCheckoutFlow drives the whole flow over HTTP: create, open the
+// checkout page, pay, get redirected, see the status — then replay the
+// outcome and check it can't be changed.
+func TestFakeCheckoutFlow(t *testing.T) {
+	svc, err := newService(newMemStore(), nil, env(map[string]string{"PAYMENTS_PROVIDER": "fake"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	svc.Routes(mux)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+
+	p, err := svc.Create(context.Background(), validPayment)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Status != StatusPending || p.Currency != "usd" || !strings.HasPrefix(p.CheckoutURL, "/api/payments/fake/checkout/") {
+		t.Fatalf("created payment = %+v", p)
+	}
+
+	page, err := client.Get(srv.URL + p.CheckoutURL)
+	if err != nil || page.StatusCode != http.StatusOK {
+		t.Fatalf("checkout page: %v %v", err, page.Status)
+	}
+
+	pay := func(result string) *http.Response {
+		t.Helper()
+		resp, err := client.PostForm(srv.URL+p.CheckoutURL, url.Values{"result": {result}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return resp
+	}
+	if resp := pay("succeeded"); resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != validPayment.SuccessURL {
+		t.Fatalf("paying: %s to %q, want 303 to the success URL", resp.Status, resp.Header.Get("Location"))
+	}
+	if got, _ := svc.Get(context.Background(), p.ID); got.Status != StatusSucceeded {
+		t.Fatalf("status after paying = %s, want succeeded", got.Status)
+	}
+
+	pay("failed")
+	if got, _ := svc.Get(context.Background(), p.ID); got.Status != StatusSucceeded {
+		t.Fatalf("a later outcome changed a final status to %s", got.Status)
+	}
+}
+
+func TestFakeRoutesOnlyWithFake(t *testing.T) {
+	real := Providers{"real": func(func(string) string) (Provider, error) { return stubProvider{}, nil }}
+	svc, err := newService(newMemStore(), real, env(map[string]string{"PAYMENTS_PROVIDER": "real"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	svc.Routes(mux)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/payments/fake/checkout/pay_x", strings.NewReader("result=succeeded")))
+	if rec.Code != http.StatusNotFound && rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("fake checkout route answered %d with a real provider selected", rec.Code)
+	}
+}
+
+func TestWebhookEvents(t *testing.T) {
+	stub := &stubProvider{}
+	svc, err := newService(newMemStore(), Providers{"stub": func(func(string) string) (Provider, error) { return stub, nil }}, env(map[string]string{"PAYMENTS_PROVIDER": "stub"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	svc.Routes(mux)
+	p, err := svc.Create(context.Background(), validPayment)
+	if err != nil {
+		t.Fatal(err)
+	}
+	post := func(provider string) int {
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/payments/webhooks/"+provider, strings.NewReader("{}")))
+		return rec.Code
+	}
+
+	stub.err = ErrInvalidSignature
+	if code := post("stub"); code != http.StatusBadRequest {
+		t.Errorf("bad signature: %d, want 400", code)
+	}
+	stub.err = nil
+
+	stub.ev, stub.ok = Event{PaymentID: "pay_unknown", Status: StatusSucceeded}, true
+	if code := post("stub"); code != http.StatusOK {
+		t.Errorf("unknown payment: %d, want 200 so it isn't redelivered", code)
+	}
+
+	stub.ev = Event{PaymentID: p.ID, ProviderRef: "someone-else", Status: StatusSucceeded}
+	if code := post("stub"); code != http.StatusInternalServerError {
+		t.Errorf("mismatched provider ref: %d, want 500", code)
+	}
+
+	stub.ev = Event{PaymentID: p.ID, ProviderRef: "stub_ref", Status: StatusFailed}
+	if code := post("stub"); code != http.StatusOK {
+		t.Errorf("valid event: %d, want 200", code)
+	}
+	if code := post("other"); code != http.StatusNotFound {
+		t.Errorf("another provider's webhook path: %d, want 404", code)
+	}
+	if got, _ := svc.Get(context.Background(), p.ID); got.Status != StatusFailed {
+		t.Errorf("status = %s, want failed", got.Status)
+	}
+}
+
+type stubProvider struct {
+	ev  Event
+	ok  bool
+	err error
+}
+
+func (stubProvider) CreateCheckout(context.Context, CheckoutRequest) (Checkout, error) {
+	return Checkout{ProviderRef: "stub_ref", URL: "https://pay.example.com/c"}, nil
+}
+
+func (s stubProvider) ParseWebhook(http.Header, []byte) (Event, bool, error) {
+	return s.ev, s.ok, s.err
+}

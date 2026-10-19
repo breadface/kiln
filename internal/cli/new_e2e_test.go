@@ -345,3 +345,46 @@ func TestApplyEndToEnd(t *testing.T) {
 		}
 	}
 }
+
+// TestNewEndToEndPayments generates each Go backend with payments/stripe and
+// runs what a developer would: gofmt, go vet, and the generated project's
+// own tests — the payments package's fake checkout flow and webhook
+// handling, and the Stripe adapter's request and signature checks.
+func TestNewEndToEndPayments(t *testing.T) {
+	if testing.Short() {
+		t.Skip("go vet/test download the pinned modules over the network; skipped with -short")
+	}
+	for _, backend := range []string{"go-api", "go-grpc-gateway"} {
+		t.Run(backend, func(t *testing.T) {
+			dir := t.TempDir()
+			root := newRootCmd()
+			buf := &bytes.Buffer{}
+			root.SetOut(buf)
+			root.SetArgs([]string{
+				"new", "e2eapp",
+				"--backend", backend,
+				"--payments", "stripe",
+				"--module", "github.com/example/e2eapp-api",
+				"--domain", "e2eapp.example.com",
+				"--admin-email", "admin@example.com",
+				"--dir", dir,
+				"--yes",
+			})
+			if err := root.Execute(); err != nil {
+				t.Fatalf("kiln new: %v\n%s", err, buf.String())
+			}
+
+			apiDir := filepath.Join(dir, "e2eapp", "e2eapp-api")
+			if out, err := exec.Command("gofmt", "-l", apiDir).CombinedOutput(); err != nil || len(out) > 0 {
+				t.Errorf("generated Go code isn't gofmt-clean: %v\n%s", err, out)
+			}
+			for _, args := range [][]string{{"vet", "./..."}, {"test", "./..."}} {
+				cmd := exec.Command("go", args...)
+				cmd.Dir = apiDir
+				if out, err := cmd.CombinedOutput(); err != nil {
+					t.Fatalf("go %v: %v\n%s", args, err, out)
+				}
+			}
+		})
+	}
+}
