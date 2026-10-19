@@ -19,7 +19,8 @@ func newRootCmd() *cobra.Command {
 		Long: "Kiln composes independent, reusable plugins — a backend, a hosting\n" +
 			"setup, and so on — into a new project, instead of copy-pasting\n" +
 			"boilerplate between projects.",
-		SilenceUsage: true,
+		SilenceUsage:  true,
+		SilenceErrors: true, // main prints the error once
 	}
 	root.AddCommand(newVersionCmd())
 	root.AddCommand(newNewCmd())
