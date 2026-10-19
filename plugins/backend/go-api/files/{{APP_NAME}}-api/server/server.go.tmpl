@@ -16,11 +16,14 @@ type Server struct {
 	DB *gorm.DB
 }
 
-// New builds a ready-to-serve http.Handler: routes, CORS, and panic
-// recovery.
-func (s *Server) New(corsOrigins string) http.Handler {
+// New builds a ready-to-serve http.Handler: routes, plus any extra route
+// registrations, CORS, and panic recovery.
+func (s *Server) New(corsOrigins string, extra ...func(*http.ServeMux)) http.Handler {
 	mux := http.NewServeMux()
 	s.routes(mux)
+	for _, register := range extra {
+		register(mux)
+	}
 
 	var origins []string
 	if corsOrigins == "" || corsOrigins == "*" {

@@ -9,6 +9,7 @@ import (
 	"{{MODULE_PATH}}/config"
 	"{{MODULE_PATH}}/db"
 	"{{MODULE_PATH}}/server"
+	// kiln:insert imports
 )
 
 func main() {
@@ -29,12 +30,17 @@ func main() {
 		if err := db.Migrate(conn); err != nil {
 			log.Fatalf("migrating: %v", err)
 		}
+		// kiln:insert migrate
 		log.Println("migrations complete")
 		return
 	}
 
+	// Plugins append functions here that register their own HTTP handlers.
+	var routes []func(*http.ServeMux)
+	// kiln:insert setup
+
 	srv := &server.Server{DB: conn}
-	handler := srv.New(cfg.CORSOrigins)
+	handler := srv.New(cfg.CORSOrigins, routes...)
 
 	log.Printf("listening on :%s", cfg.Port)
 	if err := http.ListenAndServe(":"+cfg.Port, handler); err != nil {

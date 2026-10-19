@@ -1,6 +1,6 @@
 name: go-grpc-gateway
 kind: backend
-version: 0.3.0
+version: 0.4.0
 description: >-
   Go API starter built proto-first: buf/protoc generate Go stubs from
   proto/, a real grpc.Server implements them, and grpc-gateway's ServeMux
@@ -50,10 +50,22 @@ provides:
     with:
       ENV_NAME: JWT_SECRET
       ENV_DESCRIPTION: Secret used to sign auth tokens
+      ENV_DEFAULT: change-me-in-production
   - contract: env@1
     with:
       ENV_NAME: CORS_ORIGINS
       ENV_DESCRIPTION: Comma-separated allowed CORS origins
+      ENV_DEFAULT: "*"
+  - contract: go-backend@1
+    with:
+      SERVICE_NAME: "{{SERVICE_NAME}}"
+      DIR: "{{APP_NAME}}-api"
+      MODULE_PATH: "{{MODULE_PATH}}"
+
+consumes:
+  # Every env@1, from any plugin, is passed into this service's container
+  # (bindings/env/).
+  - contract: env@1
 
 next_steps:
   - cp {{APP_NAME}}-api/.env.example {{APP_NAME}}-api/.env

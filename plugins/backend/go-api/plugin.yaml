@@ -1,6 +1,6 @@
 name: go-api
 kind: backend
-version: 0.3.0
+version: 0.4.0
 description: >-
   Minimal Go HTTP API starter: stdlib net/http routing, env-based config,
   Postgres via gorm, and a Connect/Migrate split for safe deploys.
@@ -39,10 +39,22 @@ provides:
     with:
       ENV_NAME: JWT_SECRET
       ENV_DESCRIPTION: Secret used to sign auth tokens
+      ENV_DEFAULT: change-me-in-production
   - contract: env@1
     with:
       ENV_NAME: CORS_ORIGINS
       ENV_DESCRIPTION: Comma-separated allowed CORS origins
+      ENV_DEFAULT: "*"
+  - contract: go-backend@1
+    with:
+      SERVICE_NAME: "{{SERVICE_NAME}}"
+      DIR: "{{APP_NAME}}-api"
+      MODULE_PATH: "{{MODULE_PATH}}"
+
+consumes:
+  # Every env@1, from any plugin, is passed into this service's container
+  # (bindings/env/).
+  - contract: env@1
 
 next_steps:
   - cp {{APP_NAME}}-api/.env.example {{APP_NAME}}-api/.env

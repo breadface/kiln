@@ -1,5 +1,5 @@
 Plugins
-  backend/go-api        0.3.0
+  backend/go-api        0.4.0
   mobile/kmp-compose    0.3.0
   edge/caddy            0.1.0
   registry/ghcr         0.1.0
@@ -7,6 +7,9 @@ Plugins
   ci/github-actions     0.1.0
 
 Bindings
+  env@1             DATABASE_URL        backend/go-api -> backend/go-api
+  env@1             JWT_SECRET          backend/go-api -> backend/go-api
+  env@1             CORS_ORIGINS        backend/go-api -> backend/go-api
   http-service@2    demo-api            backend/go-api -> mobile/kmp-compose
   http-service@2    demo-api            backend/go-api -> edge/caddy
   oci-image@1       demo-api            backend/go-api -> runtime/docker-swarm
@@ -113,8 +116,8 @@ Hashes
   sha256:5554c4aeedde221acf697b63866ce2a47616f53951ea7880c4523ec5c5843f9f  demo-api/dotenv/dotenv.go
   sha256:e2bb6a671f85e14054910e551b321e2156dc873ddefff04a077a1b511c5f5a47  demo-api/go.mod
   sha256:ffe4363666df72062fdc388b3ce71a29a9cedafbc211f54c10e4aa9154870ba7  demo-api/go.sum
-  sha256:e833a0f65478395b9ce3aa7fd4fd244be00b17db6eb653c120a389a93562df8b  demo-api/main.go
-  sha256:057ca0002ab06b83181d65928b55f5ff941c906f1d63bbc1512d50b8f8269cd3  demo-api/server/server.go
+  sha256:5944fd219885b39739009fdc4c20e799b68d7f89d0b2e16555e0b428021850bb  demo-api/main.go
+  sha256:8c74963c803ddac7dc1d37a161248db3a56a023e147ddb71286e8a241f679db4  demo-api/server/server.go
   sha256:cc612e77ae4fced49e4e4282f434832a97598029ee0c3119b629adcec44ca573  demo-mobile/.gitignore
   sha256:a7dea234206a809372fa5fa6c30f67470fc1ec77526c83fa1b5341acc5c57043  demo-mobile/build.gradle.kts
   sha256:3d56d0396a0085cfcb188e1f6110fca18f7cd03bd328c3778747cde39975b75d  demo-mobile/composeApp/build.gradle.kts
@@ -152,7 +155,7 @@ Hashes
   sha256:300495bda533ca77948b973aeb3a0cd310c4794dfaa2706ceb6329f0bfc70a86  demo-mobile/settings.gradle.kts
   sha256:622295c0f0e115f5b64c3ed60641b565dada99aabd11dc10749683ed8a9b2d90  deploy.sh
   sha256:42efa2a39dd799415af527e87d4b5be3280625cef32612086ce372283a56f620  docker-compose.swarm.yml
-  sha256:f69a43f7e7dfbee1f2cd0b0e428b1af2c56d4ada8d3c1311042a49127889f3aa  docker-compose.yml
+  sha256:0ce8371d4bd229f22dfd4d871c611c4db0e68b05f91bd624fa301f1c22b8d128  docker-compose.yml
 
 ==> .github/DEPLOY.md <==
 # Deploying demo
@@ -452,9 +455,9 @@ services:
             - 8.8.8.8
             - 1.1.1.1
         environment:
-            - DATABASE_URL=${DATABASE_URL}
-            - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
-            - CORS_ORIGINS=${CORS_ORIGINS:-*}
+            CORS_ORIGINS: ${CORS_ORIGINS:-*}
+            DATABASE_URL: ${DATABASE_URL:-}
+            JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
         expose:
             - "8080"
         healthcheck:

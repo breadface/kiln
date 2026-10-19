@@ -5,10 +5,6 @@ services:
       dockerfile: Dockerfile
     container_name: {{SERVICE_NAME}}
     dns: ["8.8.8.8", "1.1.1.1"]
-    environment:
-      - DATABASE_URL=${DATABASE_URL}
-      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
-      - CORS_ORIGINS=${CORS_ORIGINS:-*}
     expose: ["{{PORT}}"]
     restart: on-failure
     healthcheck:

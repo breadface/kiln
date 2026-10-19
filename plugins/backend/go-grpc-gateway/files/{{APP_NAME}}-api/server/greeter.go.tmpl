@@ -33,11 +33,14 @@ func (s *GreeterServer) Greet(ctx context.Context, req *greeterv1.GreetRequest) 
 	return &greeterv1.GreetResponse{Message: "hello, " + req.Name + ", from {{APP_NAME}}"}, nil
 }
 
-// WrapGateway adds the /api/health liveness route, CORS, and panic recovery
-// around the grpc-gateway mux.
-func WrapGateway(gwmux http.Handler, corsOrigins string) http.Handler {
+// WrapGateway adds the /api/health liveness route, any extra route
+// registrations, CORS, and panic recovery around the grpc-gateway mux.
+func WrapGateway(gwmux http.Handler, corsOrigins string, extra ...func(*http.ServeMux)) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", handleHealth)
+	for _, register := range extra {
+		register(mux)
+	}
 	mux.Handle("/", gwmux)
 
 	var origins []string
