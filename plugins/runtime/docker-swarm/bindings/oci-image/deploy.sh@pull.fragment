@@ -1,0 +1,6 @@
+for i in 1 2 3 4 5; do
+	docker pull "{{REGISTRY_HOST}}/{{REGISTRY_NAMESPACE}}/{{SERVICE_NAME}}:$IMAGE_TAG" && break
+	if [ "$i" = 5 ]; then exit 1; fi
+	echo "pull attempt $i failed, retrying..."
+	sleep 5
+done

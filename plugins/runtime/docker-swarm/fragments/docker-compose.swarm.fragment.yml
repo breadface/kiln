@@ -1,0 +1,4 @@
+networks:
+  default:
+    driver: overlay
+    attachable: true # lets standalone containers (e.g. migration runs) join

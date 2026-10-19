@@ -1,0 +1,11 @@
+services:
+  {{SERVICE_NAME}}:
+    image: {{REGISTRY_HOST}}/{{REGISTRY_NAMESPACE}}/{{SERVICE_NAME}}:${IMAGE_TAG:-latest}
+    deploy:
+      replicas: 1
+      update_config:
+        order: start-first
+        failure_action: rollback
+        monitor: 30s
+      restart_policy:
+        condition: on-failure

@@ -1,0 +1,15 @@
+name: config-file
+version: 1
+description: >-
+  A file from the project that a service reads at runtime, declared in
+  docker-compose.yml as a top-level `configs.<CONFIG_NAME>` entry with
+  `file:`, and attached to its service under `configs:`. Locally, Compose
+  mounts it from the working tree; runtime plugins ship it to wherever the
+  service runs and version it so a changed file rolls the service.
+fields:
+  - name: CONFIG_NAME
+    description: Key of the config under docker-compose.yml's top-level `configs:`.
+    required: true
+  - name: FILE
+    description: The file's path relative to the project root, exactly as in its `file:` entry.
+    required: true

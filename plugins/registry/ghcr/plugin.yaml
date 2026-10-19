@@ -1,0 +1,33 @@
+name: ghcr
+kind: registry
+version: 0.1.0
+description: >-
+  GitHub Container Registry. Images are pushed to
+  ghcr.io/<GHCR_OWNER>/<service>, authenticated with a personal access
+  token in the GHCR_TOKEN secret — not the CI job's own short-lived token,
+  which a runtime can't use to pull again after the job ends.
+
+placeholders:
+  - name: GHCR_OWNER
+    description: "GHCR namespace to push images to, e.g. your GitHub username or org (lowercase)"
+    required: true
+    flag: ghcr-owner
+    derive:
+      from: MODULE_PATH
+      match: '^github\.com/([^/]+)/'
+      template: "$1"
+  - name: GHCR_USERNAME
+    description: GitHub user who owns GHCR_TOKEN — set it when GHCR_OWNER is an organization
+    default: "{{GHCR_OWNER}}"
+    flag: ghcr-username
+
+provides:
+  - contract: image-registry@1
+    with:
+      HOST: ghcr.io
+      NAMESPACE: "{{GHCR_OWNER}}"
+      USERNAME: "{{GHCR_USERNAME}}"
+      PASSWORD_SECRET: GHCR_TOKEN
+
+next_steps:
+  - "# Create a GitHub personal access token (classic) for {{GHCR_USERNAME}} with write:packages and read:packages; CI reads it from the GHCR_TOKEN secret"

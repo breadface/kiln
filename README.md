@@ -1,7 +1,8 @@
 # Kiln
 
 Kiln is a CLI that scaffolds new projects by composing independent, reusable
-plugins — a backend, a hosting setup, a payment provider, and so on — instead
+plugins — a backend, an edge proxy, a runtime, a CI pipeline, a payment
+provider, and so on — instead
 of copy-pasting boilerplate between projects and letting it drift.
 
 ```sh
@@ -13,8 +14,10 @@ kiln new myapp \
 ```
 
 That generates a working project: a minimal Go HTTP API (stdlib routing,
-Postgres via gorm, env-based config) and a self-hosted deploy setup (GitHub
-Actions → GHCR → Docker Swarm behind Caddy, with automatic TLS). `--backend`
+Postgres via gorm, env-based config) and a self-hosted deploy setup, each
+part its own plugin — Caddy with automatic TLS at the edge, images in GHCR,
+Docker Swarm on any server you can SSH into, and a GitHub Actions pipeline
+that builds, pushes and deploys. `--backend`
 is required once more than one backend plugin exists (see Status below) —
 `go-api` is the plain REST option; `go-grpc-gateway` scaffolds the same app
 proto-first instead, with buf generating Go stubs a real `grpc.Server`
@@ -26,8 +29,9 @@ myapp/
 ├── docker-compose.yml      # local dev: docker compose up
 ├── docker-compose.swarm.yml # production overlay
 ├── Caddyfile
-├── deploy.sh                # manual deploy escape hatch
+├── deploy.sh                # deploys over SSH — run by CI, or by hand
 ├── .github/workflows/deploy.yml
+├── .github/DEPLOY.md        # every secret the pipeline needs
 └── kiln.yaml                 # records what generated this project
 ```
 
@@ -75,10 +79,21 @@ go install github.com/breadface/kiln/cmd/kiln@latest
 
 ## Status
 
-Early. Kiln currently ships four plugins: `backend/go-api`,
-`backend/go-grpc-gateway`, `hosting/docker-swarm-hetzner`, and
-`mobile/kmp-compose`, composed together by `kiln new`. More backend
-languages, frontends, and payment providers are additive — see
+Early. Kiln currently ships these plugins, composed together by
+`kiln new`:
+
+| Kind | Plugins |
+|---|---|
+| backend | `go-api`, `go-grpc-gateway` |
+| mobile | `kmp-compose` (opt-in) |
+| edge | `caddy` |
+| registry | `ghcr` |
+| runtime | `docker-swarm` |
+| ci | `github-actions` |
+
+Each infrastructure piece is replaceable on its own — another runtime, CI
+system or registry implements the same contracts. More backend languages,
+frontends, and payment providers are additive too — see
 [plugins/README.md](plugins/README.md) for the plugin format and
 [CONTRIBUTING.md](CONTRIBUTING.md) for how to add one.
 
@@ -88,9 +103,9 @@ Each plugin declares a `plugin.yaml` manifest and ships a `files/` tree
 that's copied into the generated project (with `{{PLACEHOLDER}}` values
 substituted). Plugins never refer to each other: they meet at versioned
 **contracts** ([contracts/](contracts/README.md)) — a backend *provides*
-`http-service@1` and `env@1`, a hosting plugin *consumes* them and builds,
-deploys, routes and wires secrets for every provider, whichever plugins
-those are. Shared files like `docker-compose.yml`, `Caddyfile` or a CI
+`http-service@2`, `oci-image@1` and `env@1`; the edge routes to every
+service, CI builds and pushes every image and wires every secret, and the
+runtime runs every image — whichever plugins provided them. Shared files like `docker-compose.yml`, `Caddyfile` or a CI
 workflow are extended through fragments inserted at named
 `# kiln:insert <slot>` markers. See [plugins/README.md](plugins/README.md)
 for the full format, and [RFC 0001](docs/rfcs/0001-composable-architecture.md)

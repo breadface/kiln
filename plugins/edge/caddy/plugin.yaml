@@ -1,0 +1,28 @@
+name: caddy
+kind: edge
+version: 0.1.0
+description: >-
+  Caddy as the public entrypoint: automatic TLS for DOMAIN, and one route
+  per http-service@2, by PATH_PREFIX. Runs as a `caddy` service in
+  docker-compose.yml; its Caddyfile is a config-file@1, so whichever
+  runtime is selected ships it to wherever Caddy runs.
+
+placeholders:
+  - name: DOMAIN
+    description: Primary domain Caddy will serve and get a TLS certificate for
+    required: true
+    flag: domain
+  - name: ADMIN_EMAIL
+    description: Email Caddy registers with its ACME/TLS certificate authority
+    required: true
+    flag: admin-email
+
+provides:
+  - contract: config-file@1
+    with:
+      CONFIG_NAME: caddyfile
+      FILE: Caddyfile
+
+consumes:
+  - contract: http-service@2
+    min: 1

@@ -1,0 +1,16 @@
+service="{{STACK_NAME}}_{{SERVICE_NAME}}"
+converged=""
+for i in $(seq 1 20); do
+	states=$(docker service ps "$service" --filter "desired-state=running" --format '{{.CurrentState}}' 2>/dev/null || true)
+	if [ -n "$states" ] && ! echo "$states" | grep -qv '^Running'; then
+		converged=1
+		break
+	fi
+	sleep 3
+done
+if [ -z "$converged" ]; then
+	echo "rollout did not converge for $service in time" >&2
+	docker service ps "$service" || true
+	exit 1
+fi
+echo "rollout complete: $service"

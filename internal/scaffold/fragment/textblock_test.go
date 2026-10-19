@@ -119,3 +119,15 @@ func TestMergeTextBlocksSlashComment(t *testing.T) {
 		t.Errorf("merged =\n%q\nwant\n%q", got, want)
 	}
 }
+
+func TestMergeTextBlocksHTMLComment(t *testing.T) {
+	base := []byte("## Secrets\n\n<!-- kiln:insert secrets -->\n")
+	out, err := MergeTextBlocks(base, "secrets", []NamedFragment{{PluginRef: "runtime/x", Content: "- `DEPLOY_HOST`\n"}})
+	if err != nil {
+		t.Fatalf("MergeTextBlocks: %v", err)
+	}
+	want := "## Secrets\n\n<!-- --- runtime/x --- -->\n- `DEPLOY_HOST`\n"
+	if got := string(StripMarkers(out)); got != want {
+		t.Errorf("merged =\n%q\nwant\n%q", got, want)
+	}
+}

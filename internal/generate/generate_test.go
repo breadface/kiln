@@ -38,7 +38,7 @@ func TestResolveValuesOnlyAppNameIsBuiltIn(t *testing.T) {
 // that only resolves across multiple passes (declared out of order).
 func TestResolveValuesDefaultsAndDerive(t *testing.T) {
 	selected := []*plugin.Plugin{
-		{Manifest: plugin.Manifest{Name: "hosting", Kind: plugin.KindHosting, Placeholders: []plugin.Placeholder{
+		{Manifest: plugin.Manifest{Name: "registry", Kind: plugin.KindRegistry, Placeholders: []plugin.Placeholder{
 			{Name: "IMAGE", Default: "{{OWNER}}/{{SERVICE_NAME}}"},
 			{Name: "OWNER", Required: true, Derive: &plugin.Derive{
 				From: "MODULE_PATH", Match: `^github\.com/([^/]+)/`, Template: "$1",
@@ -163,10 +163,10 @@ func (l *fakeLoader) List(kind plugin.Kind) ([]*plugin.Plugin, error) {
 	return out, nil
 }
 
-func TestSelectPluginsAutoSelectsOnlyBackendAndHosting(t *testing.T) {
+func TestSelectPluginsAutoSelectsBackendAndInfrastructure(t *testing.T) {
 	loader := &fakeLoader{plugins: []*plugin.Plugin{
 		{Manifest: plugin.Manifest{Name: "go-api", Kind: plugin.KindBackend}},
-		{Manifest: plugin.Manifest{Name: "docker-swarm-hetzner", Kind: plugin.KindHosting}},
+		{Manifest: plugin.Manifest{Name: "docker-swarm", Kind: plugin.KindRuntime}},
 		{Manifest: plugin.Manifest{Name: "kmp-compose", Kind: plugin.KindMobile}},
 	}}
 
@@ -179,7 +179,7 @@ func TestSelectPluginsAutoSelectsOnlyBackendAndHosting(t *testing.T) {
 	for _, p := range selected {
 		gotKinds = append(gotKinds, p.Manifest.Kind)
 	}
-	for _, want := range []plugin.Kind{plugin.KindBackend, plugin.KindHosting} {
+	for _, want := range []plugin.Kind{plugin.KindBackend, plugin.KindRuntime} {
 		found := false
 		for _, k := range gotKinds {
 			if k == want {

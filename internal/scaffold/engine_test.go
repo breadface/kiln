@@ -35,7 +35,7 @@ func fakeBackendPlugin() *plugin.Plugin {
 
 func fakeHostingPlugin() *plugin.Plugin {
 	return &plugin.Plugin{
-		Manifest: plugin.Manifest{Name: "docker-swarm-hetzner", Kind: plugin.KindHosting},
+		Manifest: plugin.Manifest{Name: "caddy", Kind: plugin.KindEdge},
 		FS: fstest.MapFS{
 			"files/Caddyfile": &fstest.MapFile{
 				Data: []byte("{\n\temail {{ADMIN_EMAIL}}\n}\n\n# kiln:insert\n"),
@@ -262,7 +262,7 @@ func TestGenerateComposeConflict(t *testing.T) {
 // global values, into a named slot of a nested, escaped base path.
 func TestGenerateBindingFragments(t *testing.T) {
 	host := &plugin.Plugin{
-		Manifest: plugin.Manifest{Name: "host", Kind: plugin.KindHosting},
+		Manifest: plugin.Manifest{Name: "host", Kind: plugin.KindRuntime},
 		FS: fstest.MapFS{
 			"files/dot__ci/deploy.yml": &fstest.MapFile{Data: []byte("steps:\n  # kiln:insert build\n  - run: deploy {{APP_NAME}}\n")},
 			"bindings/http-service/dot__ci/deploy.yml@build.fragment": &fstest.MapFile{
@@ -276,8 +276,8 @@ func TestGenerateBindingFragments(t *testing.T) {
 	result, err := Generate(Options{
 		Plugins: []*plugin.Plugin{api, worker, host},
 		Bindings: []plugin.Binding{
-			{Contract: "http-service@1", Consumer: host, Provider: api, Values: map[string]string{"SERVICE_NAME": "demo-api"}},
-			{Contract: "http-service@1", Consumer: host, Provider: worker, Values: map[string]string{"SERVICE_NAME": "demo-worker"}},
+			{Contract: "http-service@2", Consumer: host, Provider: api, Values: map[string]string{"SERVICE_NAME": "demo-api"}},
+			{Contract: "http-service@2", Consumer: host, Provider: worker, Values: map[string]string{"SERVICE_NAME": "demo-worker"}},
 		},
 		Values: Values{"APP_NAME": "demo"},
 	})
@@ -286,12 +286,49 @@ func TestGenerateBindingFragments(t *testing.T) {
 	}
 
 	want := "steps:\n" +
-		"  # --- hosting/host for backend/api (http-service@1) ---\n" +
+		"  # --- runtime/host for backend/api (http-service@2) ---\n" +
 		"  - run: build demo-api for demo\n" +
-		"  # --- hosting/host for glue/worker (http-service@1) ---\n" +
+		"  # --- runtime/host for glue/worker (http-service@2) ---\n" +
 		"  - run: build demo-worker for demo\n" +
 		"  - run: deploy demo\n"
 	if got := string(result.Files[".ci/deploy.yml"].Content); got != want {
 		t.Errorf(".ci/deploy.yml =\n%s\nwant\n%s", got, want)
+	}
+}
+
+// TestGenerateStructuredYAMLAnyPath covers <path>.fragment.yml targeting a
+// file other than docker-compose.yml: per-binding documents deep-merge
+// into one, on top of a base the plugin shipped in files/.
+func TestGenerateStructuredYAMLAnyPath(t *testing.T) {
+	runtime := &plugin.Plugin{
+		Manifest: plugin.Manifest{Name: "swarm", Kind: plugin.KindGlue},
+		FS: fstest.MapFS{
+			"files/deploy/stack.yml": &fstest.MapFile{Data: []byte("networks:\n  default:\n    driver: overlay\n")},
+			"bindings/oci-image/deploy/stack.fragment.yml": &fstest.MapFile{
+				Data: []byte("services:\n  {{SERVICE_NAME}}:\n    image: {{SERVICE_NAME}}:latest\n"),
+			},
+		},
+	}
+	api := &plugin.Plugin{Manifest: plugin.Manifest{Name: "api", Kind: plugin.KindBackend}, FS: fstest.MapFS{}}
+
+	result, err := Generate(Options{
+		Plugins: []*plugin.Plugin{api, runtime},
+		Bindings: []plugin.Binding{
+			{Contract: "oci-image@1", Consumer: runtime, Provider: api, Values: map[string]string{"SERVICE_NAME": "api"}},
+			{Contract: "oci-image@1", Consumer: runtime, Provider: api, Values: map[string]string{"SERVICE_NAME": "worker"}},
+		},
+		Values: Values{},
+	})
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	got := string(result.Files["deploy/stack.yml"].Content)
+	for _, want := range []string{"driver: overlay", "image: api:latest", "image: worker:latest"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("deploy/stack.yml missing %q:\n%s", want, got)
+		}
+	}
+	if !result.Files["deploy/stack.yml"].Merged {
+		t.Error("deploy/stack.yml should be marked Merged")
 	}
 }

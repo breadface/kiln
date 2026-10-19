@@ -95,7 +95,10 @@ func TestCollectValuesPromptLeftBlankStillMissing(t *testing.T) {
 // plugins yet), and value flags only because a plugin declared them.
 func TestNewFlagsComeFromPlugins(t *testing.T) {
 	cmd := newNewCmd()
-	for _, name := range []string{"backend", "hosting", "mobile", "payments", "frontend", "glue", "module", "domain", "admin-email", "ghcr-owner", "mobile-package"} {
+	for _, name := range []string{
+		"backend", "frontend", "mobile", "payments", "edge", "registry", "runtime", "ci", "glue",
+		"module", "domain", "admin-email", "ghcr-owner", "ghcr-username", "mobile-package",
+	} {
 		if cmd.Flags().Lookup(name) == nil {
 			t.Errorf("kiln new is missing --%s", name)
 		}

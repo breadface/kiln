@@ -10,8 +10,9 @@ go test ./...
 
 `go test ./...` includes an end-to-end test (`internal/cli/new_e2e_test.go`)
 that runs the real `kiln new` command against the real embedded plugins,
-then builds the generated Go module — it shells out over the network (`go
-mod tidy`). Skip it with `go test -short ./...` if you're offline.
+then builds the generated Go module — it shells out over the network to
+download the plugin's pinned modules. Skip it with `go test -short ./...`
+if you're offline.
 
 To try generation by hand:
 
@@ -50,16 +51,31 @@ plugin content is embedded via `//go:embed` (`.tmpl` suffix, `dot__` prefix
 it will silently fail to embed).
 
 After adding or changing plugin content, regenerate a project and check it
-by hand — `docker compose config` (and, for the hosting plugin,
+by hand — `docker compose config` (and, for `runtime/docker-swarm`,
 `docker compose -f docker-compose.yml -f docker-compose.swarm.yml config`)
 catches Compose schema and merge mistakes that a Go test won't. For the
-hosting plugin's other generated files:
+other generated infrastructure files:
 
 ```sh
 docker run --rm -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2-alpine \
   caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.7 .github/workflows/deploy.yml
 ```
+
+After changing `edge/caddy`, `registry/ghcr`, `runtime/docker-swarm` or
+`ci/github-actions`, run a real deploy. It needs only Docker: it deploys
+a generated project with its own `deploy.sh`, over SSH, to a disposable
+Docker-in-Docker swarm, twice, and checks the result:
+
+```sh
+scripts/smoke/docker-swarm.sh                          # go-api
+scripts/smoke/docker-swarm.sh --backend go-grpc-gateway
+```
+
+A backend must pin every dependency in `go.mod.tmpl` and ship
+`go.sum.tmpl`, with a Dockerfile on the same Go version — generated
+projects are reproducible only if nothing resolves versions at generation
+time.
 
 To change a contract, read [contracts/README.md](contracts/README.md) first
 — contracts are versioned, and an incompatible change is a new version.

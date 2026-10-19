@@ -14,7 +14,7 @@ A Kiln plugin is a directory containing:
 
 ```yaml
 name: go-api
-kind: backend          # backend | frontend | mobile | payments | hosting | glue
+kind: backend          # backend | frontend | mobile | payments | edge | registry | runtime | ci | glue
 version: 0.2.0
 description: Minimal Go HTTP API starter (net/http, Postgres+gorm, env config)
 
@@ -37,11 +37,10 @@ placeholders:
       template: "$1"
 
 provides:                      # contracts this plugin implements — see "Contracts"
-  - contract: http-service@1
+  - contract: http-service@2
     with:
       SERVICE_NAME: "{{SERVICE_NAME}}"
       PORT: "{{PORT}}"
-      BUILD_CONTEXT: "{{APP_NAME}}-api"
 consumes: []                   # contracts this plugin works with — see "Contracts"
 
 next_steps:                    # printed after generation, rendered
@@ -75,8 +74,9 @@ values, consume a contract instead (see below).
 
 ### Kind selection: auto-select vs. opt-in
 
-`backend` and `hosting` are the only kinds `kiln new` auto-selects when
-exactly one plugin exists for them — nearly every project wants one of each.
+`backend`, `edge`, `registry`, `runtime` and `ci` are the kinds `kiln new`
+auto-selects when exactly one plugin exists for them — nearly every project
+wants an app and a way to ship it.
 Every other kind (`frontend`, `mobile`, `payments`, `glue`) is **opt-in
 only**, resolved solely via an explicit flag (e.g. `--mobile kmp-compose`)
 or `--set`, even if it's the only plugin of that kind available. Don't add a
@@ -85,11 +85,8 @@ new kind to the auto-select list without a real reason — the point is that
 
 ### Registering a new plugin
 
-A new plugin isn't discoverable until it's also added to the `//go:embed`
-directive in `plugins/embed.go` (e.g. `//go:embed backend hosting mobile`)
-— that directive lists top-level kind directories explicitly, not a
-wildcard. Forgetting this is a common first mistake: the plugin builds fine,
-`go:embed` just silently doesn't include it.
+Nothing to do: `plugins/embed.go` embeds every `<kind>/<name>/` directory.
+The kind must be one Kiln knows (see `plugin.Kinds()`).
 
 ## Files
 
@@ -143,27 +140,32 @@ byte-identical after the generate round trip in its e2e test.
 
 A contract is the interface between plugins: a schema of named fields in
 [`contracts/`](../contracts/README.md), versioned by major number (e.g.
-`http-service@1`). Plugins never reference each other by name; one
+`http-service@2`). Plugins never reference each other by name; one
 **provides** a contract by filling in its fields, another **consumes** it
 and is generated against whatever providers were selected.
 
 ```yaml
 # backend/go-api
 provides:
-  - contract: http-service@1
-    with: { SERVICE_NAME: "{{SERVICE_NAME}}", PORT: "{{PORT}}", BUILD_CONTEXT: "{{APP_NAME}}-api" }
+  - contract: http-service@2
+    with: { SERVICE_NAME: "{{SERVICE_NAME}}", PORT: "{{PORT}}" }
+  - contract: oci-image@1
+    with: { SERVICE_NAME: "{{SERVICE_NAME}}", BUILD_CONTEXT: "{{APP_NAME}}-api" }
   - contract: env@1
     with: { ENV_NAME: DATABASE_URL }
 
-# hosting/docker-swarm-hetzner
+# edge/caddy
 consumes:
-  - contract: http-service@1
+  - contract: http-service@2
     min: 1              # error unless at least one selected plugin provides it
+
+# ci/github-actions
+consumes:
   - contract: env@1     # min defaults to 0, max to unlimited
 
 # mobile/kmp-compose
 consumes:
-  - contract: http-service@1
+  - contract: http-service@2
     min: 1
     max: 1
     as: API             # exports the provider's fields as {{API_PORT}}, {{API_SERVICE_NAME}}, …
@@ -178,27 +180,31 @@ A consumer uses its bindings in two ways:
 
 - **`bindings/<contract-name>/`** holds fragments (same naming as
   `fragments/`, below) rendered **once per bound provider**, with that
-  provider's contract fields layered over the global values. This is how a
-  hosting plugin builds, deploys and routes to N services without any
-  template logic: its `bindings/http-service/Caddyfile@routes.fragment` is
-  rendered for each service. A plugin that adds a service or a secret —
-  say, a payments provider — just provides `http-service@1` / `env@1`, and
-  hosting picks it up with no change (see
-  `internal/cli/contracts_test.go`).
+  provider's contract fields layered over the global values. This is how
+  infrastructure plugins build, deploy and route to N services without any
+  template logic: `edge/caddy`'s `bindings/http-service/Caddyfile@routes.fragment`
+  is rendered for each service. A plugin that adds a service or a secret —
+  say, a payments provider — just provides `http-service@2` /
+  `oci-image@1` / `env@1`, and the edge, CI and runtime pick it up with no
+  change (see `internal/cli/contracts_test.go`).
 - **`as:`** (requires `max: 1`) exports the single provider's fields as
   global placeholders, for use anywhere in the consumer's `files/`.
 
 ## Fragments
 
 Some files are contributed to by more than one plugin at once (e.g. a
-backend plugin's API service and a hosting plugin's Caddy service both
+backend plugin's API service and the edge plugin's Caddy service both
 belong in the same `docker-compose.yml`). Plugins don't own these files
 directly; they contribute a fragment instead:
 
-- `fragments/docker-compose.fragment.yml` — a YAML document merged into the
-  final `docker-compose.yml`. It's fine for two plugins to declare the exact
+- `fragments/<path>.fragment.yml` (or `.yaml`) — a YAML document
+  deep-merged into `<path>.yml`, e.g. `docker-compose.fragment.yml` into
+  `docker-compose.yml`. It's fine for two plugins to declare the exact
   same key with the same value; it's an error for them to declare the same
-  key with different values.
+  key with different values. Use this for YAML that several contracts
+  write into the same keys (`runtime/docker-swarm`'s
+  `docker-compose.swarm.yml`); comments in a YAML base don't survive the
+  merge.
 - `fragments/<path>.fragment` — plain text, inserted into the base file at
   `<path>` (relative to the project root) at its unnamed marker line.
   `<path>` goes through the same rendering and filename escapes as `files/`,
@@ -207,8 +213,8 @@ directly; they contribute a fragment instead:
 - `fragments/<path>@<slot>.fragment` — the same, at the marker for a named
   slot.
 
-A marker is a line comment (`#`, `//`, `--` or `;`) reading
-`kiln:insert` with an optional slot name:
+A marker is a comment (`#`, `//`, `--`, `;`, or `<!-- … -->` for
+Markdown) reading `kiln:insert` with an optional slot name:
 
 ```yaml
 jobs:
@@ -224,7 +230,8 @@ marker's own comment syntax. Markers are removed from the output once
 every fragment is merged, so a slot nobody contributed to just disappears.
 
 Fragments are applied in `Kind` order (backend → frontend → mobile →
-payments → hosting → glue), then binding fragments in the same order, so
+payments → edge → registry → runtime → ci → glue), then binding fragments
+in the same order, so
 generated files read top-to-bottom as "application services, then
 infrastructure."
 
@@ -236,9 +243,9 @@ about each other, and it's the pattern to reach for whenever a new plugin
 needs to contribute into something another plugin owns:
 
 1. One plugin ships the shared file under `files/` with marker lines where
-   contributions go (see `hosting/docker-swarm-hetzner`'s
-   `files/.github/workflows/deploy.yml`, which has `build`, `env`, `pull`,
-   `migrate` and `verify` slots). That plugin is the base's owner — its own
+   contributions go (see `ci/github-actions`'
+   `files/dot__github/workflows/deploy.yml`, which has `build`,
+   `env-vars`, `env-lines` and `secrets` slots). That plugin is the base's owner — its own
    contribution goes through the exact same fragment mechanism as anyone
    else's, for symmetry (see `backend/go-grpc-gateway`'s `buf.gen.yaml`
    below, which ships only the marker itself and gets 100% of its content,

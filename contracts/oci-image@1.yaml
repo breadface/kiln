@@ -1,0 +1,16 @@
+name: oci-image
+version: 1
+description: >-
+  A container image built from this project's source. CI plugins build and
+  push it to the image registry; runtime plugins run it. The image runs as
+  the service of the same SERVICE_NAME.
+fields:
+  - name: SERVICE_NAME
+    description: Service the image runs as; the image is pushed as <registry>/<namespace>/<SERVICE_NAME>.
+    required: true
+  - name: BUILD_CONTEXT
+    description: Directory, relative to the project root, the image is built from.
+    required: true
+  - name: DOCKERFILE
+    description: Dockerfile path, relative to BUILD_CONTEXT.
+    default: Dockerfile

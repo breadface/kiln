@@ -11,17 +11,18 @@ import (
 // the unnamed slot get inserted.
 const DefaultMarker = "# kiln:insert"
 
-// markerPattern matches a marker line: optional indentation, a line-comment
+// markerPattern matches a marker line: optional indentation, a comment
 // token, "kiln:insert", and an optional slot name, e.g.
 //
 //	# kiln:insert
 //	  # kiln:insert routes
 //	// kiln:insert wiring
+//	<!-- kiln:insert secrets -->
 //
 // The indentation and comment token are reused for everything inserted at
 // the marker, so fragments can be written unindented and provenance
 // comments stay valid in whatever language the base file is in.
-var markerPattern = regexp.MustCompile(`^([ \t]*)(#|//|--|;)[ \t]*kiln:insert(?:[ \t]+([A-Za-z0-9_-]+))?[ \t]*$`)
+var markerPattern = regexp.MustCompile(`^([ \t]*)(#|//|--|;|<!--)[ \t]*kiln:insert(?:[ \t]+([A-Za-z0-9_-]+))?[ \t]*(?:-->)?[ \t]*$`)
 
 // NamedFragment is a text fragment with a label identifying which plugin
 // contributed it, so the merged output stays legible about where each block
@@ -55,7 +56,11 @@ func MergeTextBlocks(base []byte, slot string, fragments []NamedFragment) ([]byt
 
 	var block []string
 	for _, f := range fragments {
-		block = append(block, fmt.Sprintf("%s%s --- %s ---", indent, comment, f.PluginRef))
+		provenance := fmt.Sprintf("%s%s --- %s ---", indent, comment, f.PluginRef)
+		if comment == "<!--" {
+			provenance += " -->"
+		}
+		block = append(block, provenance)
 		for _, l := range strings.Split(strings.TrimRight(f.Content, "\n"), "\n") {
 			if l != "" {
 				l = indent + l
