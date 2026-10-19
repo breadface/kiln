@@ -26,6 +26,23 @@ go run ./cmd/kiln new demoapp \
 
 ## Adding or changing a plugin
 
+Every supported plugin combination is listed in `scenarios` in
+`internal/cli/apply_test.go`, and snapshotted in
+`internal/cli/testdata/plans/<scenario>.golden`: the plan summary, a hash
+per generated file, and the full content of every file plugins merge
+fragments into. After an intended plugin change, regenerate the snapshots
+and commit them with the change, so reviewers see exactly what it does to
+each combination:
+
+```sh
+go test ./internal/cli -run TestGoldenPlans -update
+git diff internal/cli/testdata/plans
+```
+
+A new plugin adds its combinations to `scenarios`. Bump a plugin's
+`version` whenever its content changes — `kiln apply` treats a changed
+plugin as a different plan.
+
 See [plugins/README.md](plugins/README.md) for the manifest format,
 contracts, the `files/`/`fragments/`/`bindings/` split, and the filename escapes required because
 plugin content is embedded via `//go:embed` (`.tmpl` suffix, `dot__` prefix

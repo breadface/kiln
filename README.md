@@ -49,6 +49,24 @@ client (a single `composeApp` module plus a thin `iosApp` Xcode wrapper) that
 calls the generated API's real `GET /api/hello` over plain Ktor REST — no
 gRPC, no auth, nothing fake.
 
+### Plan, then apply
+
+`kiln plan` takes the same flags as `kiln new` and shows what it would
+generate — plugins, contract bindings, values, every file — without
+writing anything. `--json` prints it for tools and agents; `--out` saves it.
+
+```sh
+kiln plan myapp --backend go-api --module github.com/you/myapp-api \
+  --domain myapp.example.com --admin-email you@example.com --out plan.yaml
+kiln apply plan.yaml
+```
+
+Every generated project's `kiln.yaml` is itself a plan: it records each
+plugin's version and content digest, every value, every contract binding,
+and a hash of every generated file. `kiln apply path/to/kiln.yaml`
+regenerates the identical project, and refuses to if any plugin has changed
+since.
+
 ## Install
 
 ```sh
