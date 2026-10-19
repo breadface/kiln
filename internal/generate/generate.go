@@ -6,6 +6,8 @@
 package generate
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"regexp"
@@ -331,8 +333,12 @@ func ResolveBindings(selected []*plugin.Plugin, registry *contract.Registry, val
 				return nil, nil, fmt.Errorf("plugin %s accepts at most %d %s provider(s), but %s", consumer.Ref(), cn.Max, cn.Contract, describeProviders(bound))
 			}
 			for _, b := range bound {
+				var label string
+				if len(c.Fields) > 0 {
+					label = b.values[c.Fields[0].Name]
+				}
 				bindings = append(bindings, plugin.Binding{
-					Contract: c.ID(), Consumer: consumer, Provider: b.plugin, Values: b.values,
+					Contract: c.ID(), Consumer: consumer, Provider: b.plugin, Values: b.values, Label: label,
 				})
 				if cn.As == "" {
 					continue
@@ -363,7 +369,7 @@ func describeProviders[T any](bound []T) string {
 
 // BuildManifest assembles the kiln.yaml payload for a generated project.
 // Serialization stays in internal/manifest.Marshal.
-func BuildManifest(kilnVersion string, selected []*plugin.Plugin, bindings []plugin.Binding, values scaffold.Values) manifest.Project {
+func BuildManifest(kilnVersion string, selected []*plugin.Plugin, bindings []plugin.Binding, values scaffold.Values, files map[string]scaffold.GeneratedFile) manifest.Project {
 	records := make([]manifest.PluginRecord, len(selected))
 	for i, p := range selected {
 		records[i] = manifest.PluginRecord{
@@ -371,6 +377,7 @@ func BuildManifest(kilnVersion string, selected []*plugin.Plugin, bindings []plu
 			Name:    p.Manifest.Name,
 			Version: p.Manifest.Version,
 			Source:  p.Source,
+			Digest:  p.Digest,
 		}
 	}
 	bindingRecords := make([]manifest.BindingRecord, len(bindings))
@@ -382,11 +389,23 @@ func BuildManifest(kilnVersion string, selected []*plugin.Plugin, bindings []plu
 			Values:   b.Values,
 		}
 	}
+	hashes := make(map[string]string, len(files))
+	for path, f := range files {
+		hashes[path] = HashContent(f.Content)
+	}
 	return manifest.Project{
 		KilnVersion: kilnVersion,
 		GeneratedAt: time.Now().UTC(),
 		Plugins:     records,
 		Bindings:    bindingRecords,
 		Values:      values,
+		Files:       hashes,
 	}
+}
+
+// HashContent returns a generated file's content hash as recorded in
+// kiln.yaml: "sha256:<hex>".
+func HashContent(content []byte) string {
+	sum := sha256.Sum256(content)
+	return "sha256:" + hex.EncodeToString(sum[:])
 }

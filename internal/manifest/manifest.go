@@ -17,29 +17,38 @@ const FileName = "kiln.yaml"
 
 // PluginRecord records one plugin that contributed to a generated project.
 type PluginRecord struct {
-	Kind    string `yaml:"kind"`
-	Name    string `yaml:"name"`
-	Version string `yaml:"version,omitempty"`
+	Kind    string `yaml:"kind" json:"kind"`
+	Name    string `yaml:"name" json:"name"`
+	Version string `yaml:"version,omitempty" json:"version,omitempty"`
 	// Source identifies where the plugin was resolved from at generation
 	// time (e.g. "embedded"; in future, a git remote URL).
-	Source string `yaml:"source"`
+	Source string `yaml:"source" json:"source"`
+	// Digest is the plugin's content hash at generation time (see
+	// plugin.Digest) — `kiln apply` refuses to regenerate from a plugin
+	// whose content no longer matches.
+	Digest string `yaml:"digest,omitempty" json:"digest,omitempty"`
 }
 
 // BindingRecord records one contract binding between two plugins.
 type BindingRecord struct {
-	Contract string            `yaml:"contract"`
-	Consumer string            `yaml:"consumer"`
-	Provider string            `yaml:"provider"`
-	Values   map[string]string `yaml:"values,omitempty"`
+	Contract string            `yaml:"contract" json:"contract"`
+	Consumer string            `yaml:"consumer" json:"consumer"`
+	Provider string            `yaml:"provider" json:"provider"`
+	Values   map[string]string `yaml:"values,omitempty" json:"values,omitempty"`
 }
 
 // Project is the kiln.yaml contract.
 type Project struct {
-	KilnVersion string            `yaml:"kiln_version"`
-	GeneratedAt time.Time         `yaml:"generated_at"`
-	Plugins     []PluginRecord    `yaml:"plugins"`
-	Bindings    []BindingRecord   `yaml:"bindings,omitempty"`
-	Values      map[string]string `yaml:"values,omitempty"`
+	KilnVersion string            `yaml:"kiln_version" json:"kiln_version"`
+	GeneratedAt time.Time         `yaml:"generated_at" json:"generated_at"`
+	Plugins     []PluginRecord    `yaml:"plugins" json:"plugins"`
+	Bindings    []BindingRecord   `yaml:"bindings,omitempty" json:"bindings,omitempty"`
+	Values      map[string]string `yaml:"values,omitempty" json:"values,omitempty"`
+	// Files maps every generated file's path (excluding kiln.yaml itself)
+	// to the hash of its content exactly as generated — the baseline a
+	// future `kiln upgrade` diffs against to tell which files a user
+	// edited.
+	Files map[string]string `yaml:"files,omitempty" json:"files,omitempty"`
 }
 
 // Marshal serializes p as YAML. It does no I/O, so it's safe to call from
@@ -66,13 +75,19 @@ func Write(dir string, p Project) error {
 
 // Read parses dir/kiln.yaml.
 func Read(dir string) (Project, error) {
+	return ReadFile(filepath.Join(dir, FileName))
+}
+
+// ReadFile parses a kiln.yaml-format file at any path — a generated
+// project's own, or a saved `kiln plan --out` file.
+func ReadFile(path string) (Project, error) {
 	var p Project
-	data, err := os.ReadFile(filepath.Join(dir, FileName))
+	data, err := os.ReadFile(path)
 	if err != nil {
-		return p, fmt.Errorf("reading %s: %w", FileName, err)
+		return p, fmt.Errorf("reading %s: %w", path, err)
 	}
 	if err := yaml.Unmarshal(data, &p); err != nil {
-		return p, fmt.Errorf("parsing %s: %w", FileName, err)
+		return p, fmt.Errorf("parsing %s: %w", path, err)
 	}
 	return p, nil
 }

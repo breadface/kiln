@@ -39,5 +39,9 @@ Contracts are the stability boundary for every plugin, in-tree or not:
   alongside the old one and migrate plugins over. Never edit a published
   version incompatibly.
 
+List the field that identifies a provider first (e.g. `SERVICE_NAME`,
+`ENV_NAME`): Kiln uses it to label bindings in `kiln plan` output. Keep a
+field's position stable across a contract version.
+
 A field's meaning belongs in its `description`; a consumer can only rely on
 what the description promises.

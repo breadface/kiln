@@ -106,3 +106,17 @@ func TestResolveBindingsValidatesProvides(t *testing.T) {
 		}
 	}
 }
+
+func TestResolveBindingsLabelIsFirstField(t *testing.T) {
+	host := &plugin.Plugin{Manifest: plugin.Manifest{
+		Name: "host", Kind: plugin.KindHosting,
+		Consumes: []plugin.Consume{{Contract: "env@1"}},
+	}}
+	bindings, _, err := ResolveBindings([]*plugin.Plugin{service("api", "8080"), host}, registry(t), scaffold.Values{"APP_NAME": "demo"})
+	if err != nil {
+		t.Fatalf("ResolveBindings: %v", err)
+	}
+	if len(bindings) != 1 || bindings[0].Label != "API_KEY" {
+		t.Errorf("bindings = %+v, want one labelled API_KEY", bindings)
+	}
+}

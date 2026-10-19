@@ -38,7 +38,11 @@ func (l *EmbedLoader) Resolve(kind Kind, name string) (*Plugin, error) {
 	if err := yaml.Unmarshal(raw, &m); err != nil {
 		return nil, fmt.Errorf("plugin %s/%s: invalid plugin.yaml: %w", kind, name, err)
 	}
-	return &Plugin{Manifest: m, FS: sub, Source: "embedded"}, nil
+	digest, err := Digest(sub)
+	if err != nil {
+		return nil, fmt.Errorf("plugin %s/%s: %w", kind, name, err)
+	}
+	return &Plugin{Manifest: m, FS: sub, Source: "embedded", Digest: digest}, nil
 }
 
 func (l *EmbedLoader) List(kind Kind) ([]*Plugin, error) {

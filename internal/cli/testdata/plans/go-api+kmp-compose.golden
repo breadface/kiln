@@ -1,0 +1,398 @@
+Plugins
+  backend/go-api                0.2.0
+  mobile/kmp-compose            0.2.0
+  hosting/docker-swarm-hetzner  0.2.0
+
+Bindings
+  http-service@1  demo-api      backend/go-api -> mobile/kmp-compose
+  http-service@1  demo-api      backend/go-api -> hosting/docker-swarm-hetzner
+  migration@1     demo-api      backend/go-api -> hosting/docker-swarm-hetzner
+  env@1           DATABASE_URL  backend/go-api -> hosting/docker-swarm-hetzner
+  env@1           JWT_SECRET    backend/go-api -> hosting/docker-swarm-hetzner
+  env@1           CORS_ORIGINS  backend/go-api -> hosting/docker-swarm-hetzner
+
+Values
+  ADMIN_EMAIL          admin@example.com
+  API_BUILD_CONTEXT    demo-api
+  API_DOCKERFILE       Dockerfile
+  API_HEALTH_PATH      /api/health
+  API_PATH_PREFIX      /
+  API_PORT             8080
+  API_SERVICE_NAME     demo-api
+  APP_NAME             demo
+  DOMAIN               demo.example.com
+  GHCR_OWNER           example
+  MOBILE_PACKAGE       com.example.demo
+  MOBILE_PACKAGE_PATH  com/example/demo
+  MODULE_PATH          github.com/example/demo-api
+  PORT                 8080
+  PROD_API_BASE_URL    https://api.example.com
+  SERVICE_NAME         demo-api
+  STACK_NAME           demo
+
+Files (50)
+  .github/workflows/deploy.yml
+  Caddyfile
+  demo-api/.env.example
+  demo-api/Dockerfile
+  demo-api/Makefile
+  demo-api/config/config.go
+  demo-api/db/db.go
+  demo-api/dotenv/dotenv.go
+  demo-api/go.mod
+  demo-api/main.go
+  demo-api/server/server.go
+  demo-mobile/.gitignore
+  demo-mobile/build.gradle.kts
+  demo-mobile/composeApp/build.gradle.kts
+  demo-mobile/composeApp/src/androidMain/AndroidManifest.xml
+  demo-mobile/composeApp/src/androidMain/kotlin/com/example/demo/MainActivity.kt
+  demo-mobile/composeApp/src/androidMain/res/drawable/ic_launcher_background.xml
+  demo-mobile/composeApp/src/androidMain/res/drawable/ic_launcher_foreground.xml
+  demo-mobile/composeApp/src/androidMain/res/mipmap-anydpi-v26/ic_launcher.xml
+  demo-mobile/composeApp/src/androidMain/res/mipmap-anydpi-v26/ic_launcher_round.xml
+  demo-mobile/composeApp/src/androidMain/res/values/strings.xml
+  demo-mobile/composeApp/src/androidMain/res/values/themes.xml
+  demo-mobile/composeApp/src/commonMain/kotlin/com/example/demo/App.kt
+  demo-mobile/composeApp/src/commonMain/kotlin/com/example/demo/data/remote/ApiClient.kt
+  demo-mobile/composeApp/src/commonMain/kotlin/com/example/demo/data/remote/HelloApi.kt
+  demo-mobile/composeApp/src/commonMain/kotlin/com/example/demo/ui/screens/hello/HelloScreen.kt
+  demo-mobile/composeApp/src/commonMain/kotlin/com/example/demo/ui/theme/Theme.kt
+  demo-mobile/composeApp/src/commonMain/kotlin/com/example/demo/viewmodel/HelloViewModel.kt
+  demo-mobile/composeApp/src/debug/AndroidManifest.xml
+  demo-mobile/composeApp/src/debug/res/xml/network_security_config.xml
+  demo-mobile/composeApp/src/iosMain/kotlin/com/example/demo/MainViewController.kt
+  demo-mobile/gradle.properties
+  demo-mobile/gradle/libs.versions.toml
+  demo-mobile/gradle/wrapper/gradle-wrapper.jar
+  demo-mobile/gradle/wrapper/gradle-wrapper.properties
+  demo-mobile/gradlew (executable)
+  demo-mobile/gradlew.bat
+  demo-mobile/iosApp/iosApp.xcodeproj/project.pbxproj
+  demo-mobile/iosApp/iosApp.xcodeproj/xcshareddata/xcschemes/iosApp.xcscheme
+  demo-mobile/iosApp/iosApp/Assets.xcassets/AccentColor.colorset/Contents.json
+  demo-mobile/iosApp/iosApp/Assets.xcassets/AppIcon.appiconset/Contents.json
+  demo-mobile/iosApp/iosApp/Assets.xcassets/Contents.json
+  demo-mobile/iosApp/iosApp/ContentView.swift
+  demo-mobile/iosApp/iosApp/Preview Content/Preview Assets.xcassets/Contents.json
+  demo-mobile/iosApp/iosApp/iOSApp.swift
+  demo-mobile/settings.gradle.kts
+  deploy.sh (executable)
+  docker-compose.swarm.yml
+  docker-compose.yml
+  kiln.yaml
+
+Hashes
+  sha256:d5553a04b304d0e347f406ebb6aa79a155a03c67428d29b8e277e316c7616bbd  .github/workflows/deploy.yml
+  sha256:5270ca4fe66c942c1a5e7f5a656c853871e17589f4c878b1148060f43de5da13  Caddyfile
+  sha256:ff4a7418b57f466d15fd4ee118058ea5e10b9fa52e8295d04835bb0ab4b3a460  demo-api/.env.example
+  sha256:555f6d27901dc0ae825dcb580917328842964d3583ab41d5176dac7a8a8a0ee2  demo-api/Dockerfile
+  sha256:9fc58b1e285016892697a5451e59195c4bd9eb3d17a1582ccf5849344822df84  demo-api/Makefile
+  sha256:c1ad0ebe72d0398a2295e9b339d1473baeaa3715ed8dec33846626bbcba9a4f9  demo-api/config/config.go
+  sha256:6b8b46943d26fbcf7b87f1d445c2946bcf0b794228870200405022e81fd933ac  demo-api/db/db.go
+  sha256:5554c4aeedde221acf697b63866ce2a47616f53951ea7880c4523ec5c5843f9f  demo-api/dotenv/dotenv.go
+  sha256:c0b267eeca6a5fec51b9630f6469501f3af79ab0ce05d52b36dfeaacf5ddd3ef  demo-api/go.mod
+  sha256:e833a0f65478395b9ce3aa7fd4fd244be00b17db6eb653c120a389a93562df8b  demo-api/main.go
+  sha256:057ca0002ab06b83181d65928b55f5ff941c906f1d63bbc1512d50b8f8269cd3  demo-api/server/server.go
+  sha256:cc612e77ae4fced49e4e4282f434832a97598029ee0c3119b629adcec44ca573  demo-mobile/.gitignore
+  sha256:a7dea234206a809372fa5fa6c30f67470fc1ec77526c83fa1b5341acc5c57043  demo-mobile/build.gradle.kts
+  sha256:3d56d0396a0085cfcb188e1f6110fca18f7cd03bd328c3778747cde39975b75d  demo-mobile/composeApp/build.gradle.kts
+  sha256:12a63fd3dff6ea8499c7c86aa46e335dec9f43e1d1aac324efbdc19bc980e74b  demo-mobile/composeApp/src/androidMain/AndroidManifest.xml
+  sha256:c66715032156e29728cfe455b2e07a02ddc9612bee5e0435060aefd21b225bf9  demo-mobile/composeApp/src/androidMain/kotlin/com/example/demo/MainActivity.kt
+  sha256:12126ce87128db41cf04b74d4e71b232c8c8b4e88cf0c70e21519ad303254171  demo-mobile/composeApp/src/androidMain/res/drawable/ic_launcher_background.xml
+  sha256:e65ba8f0a59184459637580271aefcc46d22ef8352c5a5b7ef92df60e34f49b3  demo-mobile/composeApp/src/androidMain/res/drawable/ic_launcher_foreground.xml
+  sha256:d552733f41cabf9a08642e1cdc4d4151a6d832b791b168fa1a5935b4b05b4de6  demo-mobile/composeApp/src/androidMain/res/mipmap-anydpi-v26/ic_launcher.xml
+  sha256:d552733f41cabf9a08642e1cdc4d4151a6d832b791b168fa1a5935b4b05b4de6  demo-mobile/composeApp/src/androidMain/res/mipmap-anydpi-v26/ic_launcher_round.xml
+  sha256:65ec48cd67c3e307df3331bf66bd2589b6a01d9470dee29ccb9c146e303baeba  demo-mobile/composeApp/src/androidMain/res/values/strings.xml
+  sha256:784062315ee97f7fd52426b156b197c0dedc2431e5c8c2e68ec385376cd915e3  demo-mobile/composeApp/src/androidMain/res/values/themes.xml
+  sha256:237d939c1c4387fa556abc34988299ac9b6eb4208829e7d087d4dab2853c1dd7  demo-mobile/composeApp/src/commonMain/kotlin/com/example/demo/App.kt
+  sha256:6e419253f33434cfa1295d58d1605454ec73de6c8d109c873ad42897fa095259  demo-mobile/composeApp/src/commonMain/kotlin/com/example/demo/data/remote/ApiClient.kt
+  sha256:4d0a8c11aa23a65964abc6374b8cbe9cb7b0574d4f87bf662425eec7693250e9  demo-mobile/composeApp/src/commonMain/kotlin/com/example/demo/data/remote/HelloApi.kt
+  sha256:effb7c3c4e51b331d0a99e3aeb8055ec54d413cc3cea6e91757c80e9d09f724f  demo-mobile/composeApp/src/commonMain/kotlin/com/example/demo/ui/screens/hello/HelloScreen.kt
+  sha256:672029064e0c3508f2d6a55e8719ca1f211746cf77c2be7f00b1a58e2cd6e0cb  demo-mobile/composeApp/src/commonMain/kotlin/com/example/demo/ui/theme/Theme.kt
+  sha256:c006cce1181f6e6e30c95bca85be081565a2d8d00554ae1caf9b5b2be579753e  demo-mobile/composeApp/src/commonMain/kotlin/com/example/demo/viewmodel/HelloViewModel.kt
+  sha256:0e4974ef8551f21e350966f2b30cfc3a7f9c3e077e919b6c1681f8e8100ab4d3  demo-mobile/composeApp/src/debug/AndroidManifest.xml
+  sha256:a9775ba979aa9925850e452899068dd3fbdbc48b22e42a64267f20829a2c725f  demo-mobile/composeApp/src/debug/res/xml/network_security_config.xml
+  sha256:a6708df62ed4186cae0b1c7611a5fd50cfc16d7ac49ac65f6b56039512b66be0  demo-mobile/composeApp/src/iosMain/kotlin/com/example/demo/MainViewController.kt
+  sha256:b801523a7773a1356ec31c0b35319ebb108eea44c2649297df1f2d083fdf702d  demo-mobile/gradle.properties
+  sha256:5ddac4a326edfabdb2216b53c53ba979f9d21b9f5a7439729e3f0a61a343c582  demo-mobile/gradle/libs.versions.toml
+  sha256:497c8c2a7e5031f6aa847f88104aa80a93532ec32ee17bdb8d1d2f67a194a9c7  demo-mobile/gradle/wrapper/gradle-wrapper.jar
+  sha256:94c3a7cce4cdb7b52232c72acc2083ca2d35ae1951602448ce8d40dc59908a69  demo-mobile/gradle/wrapper/gradle-wrapper.properties
+  sha256:a5a5c199ba02189ae8c46a334223371a20599d9c298ef65e7540ede4a3f72d59  demo-mobile/gradlew
+  sha256:d539676c48b596afda64c963ec8f7ee56c7b3fe7e3b81d1dbe2d1a1e3dd9e9f8  demo-mobile/gradlew.bat
+  sha256:8f9e7431097f124c99ed14a7ee1affbbf9f32d0926dc848d3e4ba9d26ebe44b4  demo-mobile/iosApp/iosApp.xcodeproj/project.pbxproj
+  sha256:2cdcad3dcedba6b2e3e61993183bd4e8e61ebe34b2c1b2821c135f13be0ce29a  demo-mobile/iosApp/iosApp.xcodeproj/xcshareddata/xcschemes/iosApp.xcscheme
+  sha256:9af65086fa30b49252fae1a1225731691de794f7775af74d71befeb507d12b7c  demo-mobile/iosApp/iosApp/Assets.xcassets/AccentColor.colorset/Contents.json
+  sha256:554c06afb2bf81e3af423161e55281ea25575759a2d2d8c63229d4981d89bd0b  demo-mobile/iosApp/iosApp/Assets.xcassets/AppIcon.appiconset/Contents.json
+  sha256:0fd49ba3c3585c709678e0046a821c3c60685ec7063720d30d3a3448be3a208b  demo-mobile/iosApp/iosApp/Assets.xcassets/Contents.json
+  sha256:913a39ea35f52a5bb10bff6da5036651cda5f0b208aa81933bddcc74f5d4a43b  demo-mobile/iosApp/iosApp/ContentView.swift
+  sha256:0fd49ba3c3585c709678e0046a821c3c60685ec7063720d30d3a3448be3a208b  demo-mobile/iosApp/iosApp/Preview Content/Preview Assets.xcassets/Contents.json
+  sha256:01d47afe5d13eb9ec48d9e8987c7920e72f2fefa5b06ec525087025caa809386  demo-mobile/iosApp/iosApp/iOSApp.swift
+  sha256:300495bda533ca77948b973aeb3a0cd310c4794dfaa2706ceb6329f0bfc70a86  demo-mobile/settings.gradle.kts
+  sha256:925a93e57fc833282600532940ff60498c913b212cd864154e9bebf893f270e5  deploy.sh
+  sha256:26b001e1ae72fa1316c800c90a865dca0814624910eb756012260dd1cdc3b47f  docker-compose.swarm.yml
+  sha256:1003fc4cd1300348cf2982f0704c589f96760ffdfd50c2cda81ca2f747ef2277  docker-compose.yml
+
+==> .github/workflows/deploy.yml <==
+name: Deploy
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # --- hosting/docker-swarm-hetzner for backend/go-api (http-service@1) ---
+      - uses: docker/build-push-action@v5
+        with:
+          context: ./demo-api
+          file: ./demo-api/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/example/demo-api:${{ github.sha }}
+            ghcr.io/example/demo-api:latest
+          cache-from: type=gha,scope=demo-api
+          cache-to: type=gha,mode=max,scope=demo-api
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: ${{ secrets.HETZNER_USER }}
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            cd ~/demo
+
+            cat > .env <<'ENVEOF'
+            # --- hosting/docker-swarm-hetzner for backend/go-api (env@1) ---
+            DATABASE_URL=${{ secrets.DATABASE_URL }}
+            # --- hosting/docker-swarm-hetzner for backend/go-api (env@1) ---
+            JWT_SECRET=${{ secrets.JWT_SECRET }}
+            # --- hosting/docker-swarm-hetzner for backend/go-api (env@1) ---
+            CORS_ORIGINS=${{ secrets.CORS_ORIGINS }}
+            ENVEOF
+
+            docker swarm init >/dev/null 2>&1 || true
+
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+            IMAGE_TAG="${{ github.sha }}"
+
+            docker config inspect "caddyfile_$IMAGE_TAG" >/dev/null 2>&1 || \
+              docker config create "caddyfile_$IMAGE_TAG" ./Caddyfile
+
+            # Pull with retry — GHCR can take a moment to propagate a
+            # freshly pushed image.
+            # --- hosting/docker-swarm-hetzner for backend/go-api (http-service@1) ---
+            for i in 1 2 3 4 5; do
+              docker pull "ghcr.io/example/demo-api:$IMAGE_TAG" && break
+              echo "pull attempt $i failed, retrying..."
+              sleep 5
+            done
+
+            # --- hosting/docker-swarm-hetzner for backend/go-api (migration@1) ---
+            echo "=== Running migrations: demo-api ==="
+            docker run --rm \
+              --env-file .env \
+              "ghcr.io/example/demo-api:$IMAGE_TAG" \
+              ./api-server -migrate
+
+            echo "=== Deploying stack ==="
+            for i in 1 2 3; do
+              IMAGE_TAG=$IMAGE_TAG docker stack deploy \
+                --with-registry-auth \
+                --prune \
+                -c docker-compose.yml \
+                -c docker-compose.swarm.yml \
+                demo && break
+              echo "stack deploy attempt $i failed, retrying..."
+              sleep 5
+            done
+
+            echo "=== Verifying rollout ==="
+            # --- hosting/docker-swarm-hetzner for backend/go-api (http-service@1) ---
+            service="demo_demo-api"
+            converged=""
+            for i in $(seq 1 20); do
+              states=$(docker service ps "$service" --filter "desired-state=running" --format '{{.CurrentState}}' 2>/dev/null || true)
+              if [ -n "$states" ] && ! echo "$states" | grep -qv '^Running'; then
+                converged=1
+                break
+              fi
+              sleep 3
+            done
+            if [ -z "$converged" ]; then
+              echo "rollout did not converge for $service in time" >&2
+              docker service ps "$service" || true
+              exit 1
+            fi
+            echo "rollout complete: $service"
+
+            docker image prune -f
+
+==> Caddyfile <==
+{
+	email admin@example.com
+	# Caddy stores certs in the caddy_data volume — persisted across restarts.
+	# No init script, no reload hooks, no certbot. It just works.
+}
+
+demo.example.com {
+	# --- hosting/docker-swarm-hetzner for backend/go-api (http-service@1) ---
+	handle /* {
+		reverse_proxy demo-api:8080 {
+			header_up X-Forwarded-For {remote_host}
+		}
+	}
+}
+
+==> deploy.sh <==
+#!/bin/bash
+# Manual escape hatch — use this on the server if you need to deploy
+# without going through GitHub Actions (e.g. a hotfix or CI is down).
+#
+# Requires: GHCR_TOKEN env var, IMAGE_TAG env var (or defaults to latest)
+#
+# Usage:
+#   IMAGE_TAG=abc1234 GHCR_TOKEN=ghp_xxx ./deploy.sh
+
+set -euo pipefail
+
+IMAGE_TAG=${IMAGE_TAG:-latest}
+GITHUB_ACTOR=${GITHUB_ACTOR:-example}
+
+echo "=== Manual deploy: $IMAGE_TAG ==="
+
+echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+
+# Create versioned Caddyfile config (skip if already exists — same SHA = same content)
+docker config inspect "caddyfile_$IMAGE_TAG" >/dev/null 2>&1 || \
+	docker config create "caddyfile_$IMAGE_TAG" ./Caddyfile
+
+# --- hosting/docker-swarm-hetzner for backend/go-api (migration@1) ---
+echo "=== Running migrations: demo-api ==="
+docker run --rm \
+	--env-file .env \
+	"ghcr.io/example/demo-api:$IMAGE_TAG" \
+	./api-server -migrate
+
+echo "=== Deploying stack ==="
+IMAGE_TAG=$IMAGE_TAG docker stack deploy \
+	--with-registry-auth \
+	--prune \
+	-c docker-compose.yml \
+	-c docker-compose.swarm.yml \
+	demo
+
+docker image prune -f
+echo "=== Done ==="
+
+==> docker-compose.swarm.yml <==
+# Production overlay — merged on top of docker-compose.yml at deploy time:
+#   docker stack deploy -c docker-compose.yml -c docker-compose.swarm.yml \
+#     --with-registry-auth demo
+#
+# docker stack deploy never builds images (Swarm only pulls them), so this
+# file adds `image:` per service rather than needing to remove `build:` —
+# the base file's `build:` key is simply ignored in Swarm mode. Every
+# service is tagged with the same IMAGE_TAG (the commit SHA being deployed).
+#
+# The caddy service picks up an *externally* created Swarm config here
+# (see deploy.sh) instead of relying only on the bind-mounted Caddyfile
+# from docker-compose.yml. Swarm configs are immutable and versioned by
+# name, so a changed Caddyfile means creating a new named config and
+# pointing this file's `configs.caddyfile.name` at it — that's also what
+# makes Swarm recognize the caddy service needs to restart at all; a plain
+# bind mount's contents changing wouldn't trigger anything on its own.
+
+services:
+  # --- hosting/docker-swarm-hetzner for backend/go-api (http-service@1) ---
+  demo-api:
+    image: ghcr.io/example/demo-api:${IMAGE_TAG:-latest}
+    deploy:
+      replicas: 1
+      update_config:
+        order: start-first
+        failure_action: rollback
+        monitor: 30s
+      restart_policy:
+        condition: on-failure
+
+  caddy:
+    configs:
+      - source: caddyfile
+        target: /etc/caddy/Caddyfile
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+
+networks:
+  default:
+    driver: overlay
+    attachable: true # lets standalone containers (e.g. the migration run in deploy.sh) join
+
+configs:
+  caddyfile:
+    external: true
+    name: caddyfile_${IMAGE_TAG:-latest}
+
+==> docker-compose.yml <==
+# Generated by kiln from plugins: backend/go-api, mobile/kmp-compose, hosting/docker-swarm-hetzner
+services:
+    caddy:
+        image: caddy:2-alpine
+        ports:
+            - 80:80
+            - 443:443
+        restart: always
+        volumes:
+            - ./Caddyfile:/etc/caddy/Caddyfile:ro
+            - caddy_data:/data
+            - caddy_config:/config
+    demo-api:
+        build:
+            context: ./demo-api
+            dockerfile: Dockerfile
+        container_name: demo-api
+        dns:
+            - 8.8.8.8
+            - 1.1.1.1
+        environment:
+            - DATABASE_URL=${DATABASE_URL}
+            - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+            - CORS_ORIGINS=${CORS_ORIGINS:-*}
+        expose:
+            - "8080"
+        healthcheck:
+            interval: 30s
+            retries: 3
+            test:
+                - CMD
+                - wget
+                - -qO-
+                - http://localhost:8080/api/health
+            timeout: 5s
+        restart: on-failure
+volumes:
+    caddy_config: {}
+    caddy_data: {}

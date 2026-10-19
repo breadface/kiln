@@ -1,6 +1,6 @@
 # RFC 0001: Kiln as a composer of independent plugins
 
-- Status: accepted; milestone 1 implemented
+- Status: accepted; milestones 1–2 implemented
 - Date: 2026-10-19
 
 ## Goal
@@ -54,12 +54,27 @@ Known leftovers: `ContributesGoModule` / `go.work` and the special-cased
 `docker-compose.fragment.yml` are still in the engine; `Kind` is still a
 closed list; selection is still one plugin per kind.
 
-### 2. Plan / apply and a lockfile
+### 2. Plan / apply and a lockfile — done
 
-`kiln plan` resolves selection, values and bindings into a lockfile (exact
-plugin versions and content hashes) plus a file tree, with no side effects.
-`kiln apply` writes it. Golden-snapshot tests over plans make every plugin
-change reviewable as a diff of generated output.
+- `kiln plan` resolves selection, values and bindings and renders every
+  file in memory, with no side effects; `--json` for tools, `--out` to
+  save. `kiln apply` writes a saved plan or any project's `kiln.yaml`;
+  `kiln new` is plan + apply.
+- `kiln.yaml` is the lockfile: plugin versions and content digests, values,
+  bindings, and a hash of every rendered file. `apply` refuses to run if a
+  plugin's version or digest differs from what was recorded.
+- Golden snapshots per supported combination
+  (`internal/cli/testdata/plans/`) make every plugin change reviewable as a
+  diff of generated output; a reproducibility test checks every
+  combination regenerates byte for byte from its own `kiln.yaml`.
+
+Finding: `post_copy` hooks break reproducibility. `go mod tidy` rewrites
+`go.mod`/`go.sum` after rendering, with results that depend on the network
+at that moment, so `kiln.yaml`'s hashes describe Kiln's rendered output,
+not what's on disk. Before `kiln upgrade` (milestone 6) can treat "differs
+from recorded hash" as "edited by the user", hooks must either become
+declarative steps whose output Kiln records, or have their effects hashed
+after they run.
 
 ### 3. Split hosting into independent axes
 

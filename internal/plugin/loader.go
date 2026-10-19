@@ -11,6 +11,8 @@ type Plugin struct {
 	// future a git remote URL). Recorded into the generated project's
 	// kiln.yaml so `kiln upgrade` knows where to re-fetch from.
 	Source string
+	// Digest is a content hash of FS (see Digest).
+	Digest string
 }
 
 // Ref returns the plugin's "kind/name" reference.
@@ -27,6 +29,10 @@ type Binding struct {
 	Consumer *Plugin
 	Provider *Plugin
 	Values   map[string]string
+	// Label is the value of the contract's first field — by convention
+	// the one that identifies a provider (e.g. SERVICE_NAME, ENV_NAME) —
+	// so bindings of the same contract can be told apart in output.
+	Label string
 }
 
 // Loader resolves plugins by kind and name. EmbedLoader is the only
