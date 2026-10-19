@@ -1,0 +1,22 @@
+name: image-registry
+version: 1
+description: >-
+  Where oci-image@1 images are pushed and pulled from. CI plugins log in
+  and push; runtime plugins pull. Images are named
+  <HOST>/<NAMESPACE>/<SERVICE_NAME>.
+fields:
+  - name: HOST
+    description: Registry hostname, e.g. ghcr.io.
+    required: true
+  - name: NAMESPACE
+    description: Path under HOST that images are pushed to, e.g. a user or organization.
+    required: true
+  - name: USERNAME
+    description: Username to log in with.
+    required: true
+  - name: PASSWORD_SECRET
+    description: >-
+      Name of the CI secret holding a long-lived token that can push and
+      pull. Long-lived because runtimes may keep it to pull again later
+      (e.g. restarting a container), long after the CI job ends.
+    required: true

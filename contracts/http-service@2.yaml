@@ -1,0 +1,19 @@
+name: http-service
+version: 2
+description: >-
+  A long-running service that serves HTTP on one port. Edge plugins route
+  public traffic to it; clients (e.g. mobile) call it. How it's built and
+  run is not part of this contract — see oci-image@1.
+fields:
+  - name: SERVICE_NAME
+    description: Unique service name; also its internal DNS name on the project's network.
+    required: true
+  - name: PORT
+    description: Port the service listens on.
+    required: true
+  - name: PATH_PREFIX
+    description: Public URL path prefix routed to this service, always starting and ending with "/".
+    default: /
+  - name: HEALTH_PATH
+    description: HTTP path that returns 2xx once the service is healthy, empty if it has none.
+    default: ""

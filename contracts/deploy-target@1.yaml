@@ -1,0 +1,12 @@
+name: deploy-target
+version: 1
+description: >-
+  How to deploy this project. CI plugins run COMMAND after pushing images,
+  from the project root, with IMAGE_TAG set to the tag just pushed, a .env
+  file holding every env@1 value, every deploy-secret@1 exported as an
+  environment variable, and docker logged in to the image registry. The
+  same command works by hand with the same inputs.
+fields:
+  - name: COMMAND
+    description: Shell command to run from the project root.
+    required: true
