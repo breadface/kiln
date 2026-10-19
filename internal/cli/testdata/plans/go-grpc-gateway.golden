@@ -1,0 +1,350 @@
+Plugins
+  backend/go-grpc-gateway       0.2.0
+  hosting/docker-swarm-hetzner  0.2.0
+
+Bindings
+  http-service@1  demo-api      backend/go-grpc-gateway -> hosting/docker-swarm-hetzner
+  migration@1     demo-api      backend/go-grpc-gateway -> hosting/docker-swarm-hetzner
+  env@1           DATABASE_URL  backend/go-grpc-gateway -> hosting/docker-swarm-hetzner
+  env@1           JWT_SECRET    backend/go-grpc-gateway -> hosting/docker-swarm-hetzner
+  env@1           CORS_ORIGINS  backend/go-grpc-gateway -> hosting/docker-swarm-hetzner
+
+Values
+  ADMIN_EMAIL   admin@example.com
+  APP_NAME      demo
+  DOMAIN        demo.example.com
+  GHCR_OWNER    example
+  GRPC_PORT     9090
+  MODULE_PATH   github.com/example/demo-api
+  PORT          8080
+  SERVICE_NAME  demo-api
+  STACK_NAME    demo
+
+Files (21)
+  .github/workflows/deploy.yml
+  Caddyfile
+  buf.gen.yaml
+  buf.yaml
+  demo-api/.env.example
+  demo-api/Dockerfile
+  demo-api/Makefile
+  demo-api/config/config.go
+  demo-api/db/db.go
+  demo-api/dotenv/dotenv.go
+  demo-api/go.mod
+  demo-api/main.go
+  demo-api/proto/pb/greeter/greeter.pb.go
+  demo-api/proto/pb/greeter/greeter.pb.gw.go
+  demo-api/proto/pb/greeter/greeter_grpc.pb.go
+  demo-api/server/greeter.go
+  deploy.sh (executable)
+  docker-compose.swarm.yml
+  docker-compose.yml
+  kiln.yaml
+  proto/greeter/greeter.proto
+
+Hashes
+  sha256:9b0a08de4343426d692966e82ee03c07e4d3d3d71eb2d29b2fd95702b295c09e  .github/workflows/deploy.yml
+  sha256:04e6bce9c7f140dff6f644ecfc797c989638b19e72be9d8487687695a39d913b  Caddyfile
+  sha256:24a8ed6e69346a8c79da35967ac913b2b8a10010088b87ccbc5b965544613ebd  buf.gen.yaml
+  sha256:68c60b5e3e4cec391a9a96736a357d7df6bd8f57a50b1468af0f836587a0ec16  buf.yaml
+  sha256:c084223e489410c99b713909ead465663e196d74e541a0d95dd0d65c00a3b731  demo-api/.env.example
+  sha256:0f2a9791e5bb427effd1525d5e73bb881ccc616eea39d337dc4088b631e3efe2  demo-api/Dockerfile
+  sha256:281ffcdbc6dde83168be83a389362bd1074f43cc5d8240725bfa72557a5b6bcf  demo-api/Makefile
+  sha256:792536e410427eac4a5c7ff81ce3f3befc9dd5f0739c68e4a74f6d7e22b2ec8d  demo-api/config/config.go
+  sha256:6b8b46943d26fbcf7b87f1d445c2946bcf0b794228870200405022e81fd933ac  demo-api/db/db.go
+  sha256:5554c4aeedde221acf697b63866ce2a47616f53951ea7880c4523ec5c5843f9f  demo-api/dotenv/dotenv.go
+  sha256:b14587936c5802c0711953d404cf68de8c8d43a3928834751b604ab53b2b751c  demo-api/go.mod
+  sha256:70fb9891366b95589901ae924afe451854f465a16e8cebad9a567544f5351432  demo-api/main.go
+  sha256:0015da8eb648845efcf86e8d3ac221d3725884267bc6070e0965b784e12d24d9  demo-api/proto/pb/greeter/greeter.pb.go
+  sha256:3bfe0530805c73f852b2c7185f45a3bf8d70fd89a291fb60c791b1e8c8a1e001  demo-api/proto/pb/greeter/greeter.pb.gw.go
+  sha256:22a36341e397987ca6e927417ea91140fddaee7a7ee463cdcdf449457543421a  demo-api/proto/pb/greeter/greeter_grpc.pb.go
+  sha256:87456b25d7ecd535e2c5dc3f449f69ac64f20aa1fbbfcc5ca1d6689486b086f6  demo-api/server/greeter.go
+  sha256:69672766372a4915e0582d9824cdf911f461ac6967c3095518c052169978753b  deploy.sh
+  sha256:e63d85e402410b6a290aad91ab344846a4a29c04f85d6f831d6937196ff498ae  docker-compose.swarm.yml
+  sha256:b8cd55a2baba0c4d696ac6737937cb7373a1946e164dfde30b96b5497ddc623a  docker-compose.yml
+  sha256:78f2f1a8ca87317041e2dc6ea5a1a19c256a7478d04f23b098a553f5b9512589  proto/greeter/greeter.proto
+
+==> .github/workflows/deploy.yml <==
+name: Deploy
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # --- hosting/docker-swarm-hetzner for backend/go-grpc-gateway (http-service@1) ---
+      - uses: docker/build-push-action@v5
+        with:
+          context: ./demo-api
+          file: ./demo-api/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/example/demo-api:${{ github.sha }}
+            ghcr.io/example/demo-api:latest
+          cache-from: type=gha,scope=demo-api
+          cache-to: type=gha,mode=max,scope=demo-api
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: ${{ secrets.HETZNER_USER }}
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            cd ~/demo
+
+            cat > .env <<'ENVEOF'
+            # --- hosting/docker-swarm-hetzner for backend/go-grpc-gateway (env@1) ---
+            DATABASE_URL=${{ secrets.DATABASE_URL }}
+            # --- hosting/docker-swarm-hetzner for backend/go-grpc-gateway (env@1) ---
+            JWT_SECRET=${{ secrets.JWT_SECRET }}
+            # --- hosting/docker-swarm-hetzner for backend/go-grpc-gateway (env@1) ---
+            CORS_ORIGINS=${{ secrets.CORS_ORIGINS }}
+            ENVEOF
+
+            docker swarm init >/dev/null 2>&1 || true
+
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+            IMAGE_TAG="${{ github.sha }}"
+
+            docker config inspect "caddyfile_$IMAGE_TAG" >/dev/null 2>&1 || \
+              docker config create "caddyfile_$IMAGE_TAG" ./Caddyfile
+
+            # Pull with retry — GHCR can take a moment to propagate a
+            # freshly pushed image.
+            # --- hosting/docker-swarm-hetzner for backend/go-grpc-gateway (http-service@1) ---
+            for i in 1 2 3 4 5; do
+              docker pull "ghcr.io/example/demo-api:$IMAGE_TAG" && break
+              echo "pull attempt $i failed, retrying..."
+              sleep 5
+            done
+
+            # --- hosting/docker-swarm-hetzner for backend/go-grpc-gateway (migration@1) ---
+            echo "=== Running migrations: demo-api ==="
+            docker run --rm \
+              --env-file .env \
+              "ghcr.io/example/demo-api:$IMAGE_TAG" \
+              ./api-server -migrate
+
+            echo "=== Deploying stack ==="
+            for i in 1 2 3; do
+              IMAGE_TAG=$IMAGE_TAG docker stack deploy \
+                --with-registry-auth \
+                --prune \
+                -c docker-compose.yml \
+                -c docker-compose.swarm.yml \
+                demo && break
+              echo "stack deploy attempt $i failed, retrying..."
+              sleep 5
+            done
+
+            echo "=== Verifying rollout ==="
+            # --- hosting/docker-swarm-hetzner for backend/go-grpc-gateway (http-service@1) ---
+            service="demo_demo-api"
+            converged=""
+            for i in $(seq 1 20); do
+              states=$(docker service ps "$service" --filter "desired-state=running" --format '{{.CurrentState}}' 2>/dev/null || true)
+              if [ -n "$states" ] && ! echo "$states" | grep -qv '^Running'; then
+                converged=1
+                break
+              fi
+              sleep 3
+            done
+            if [ -z "$converged" ]; then
+              echo "rollout did not converge for $service in time" >&2
+              docker service ps "$service" || true
+              exit 1
+            fi
+            echo "rollout complete: $service"
+
+            docker image prune -f
+
+==> Caddyfile <==
+{
+	email admin@example.com
+	# Caddy stores certs in the caddy_data volume — persisted across restarts.
+	# No init script, no reload hooks, no certbot. It just works.
+}
+
+demo.example.com {
+	# --- hosting/docker-swarm-hetzner for backend/go-grpc-gateway (http-service@1) ---
+	handle /* {
+		reverse_proxy demo-api:8080 {
+			header_up X-Forwarded-For {remote_host}
+		}
+	}
+}
+
+==> buf.gen.yaml <==
+version: v2
+managed:
+  enabled: false
+plugins:
+  # --- backend/go-grpc-gateway ---
+    - remote: buf.build/protocolbuffers/go
+      out: demo-api/proto/pb
+      opt:
+        - paths=source_relative
+    - remote: buf.build/grpc/go
+      out: demo-api/proto/pb
+      opt:
+        - paths=source_relative
+    - remote: buf.build/grpc-ecosystem/gateway
+      out: demo-api/proto/pb
+      opt:
+        - paths=source_relative
+
+==> deploy.sh <==
+#!/bin/bash
+# Manual escape hatch — use this on the server if you need to deploy
+# without going through GitHub Actions (e.g. a hotfix or CI is down).
+#
+# Requires: GHCR_TOKEN env var, IMAGE_TAG env var (or defaults to latest)
+#
+# Usage:
+#   IMAGE_TAG=abc1234 GHCR_TOKEN=ghp_xxx ./deploy.sh
+
+set -euo pipefail
+
+IMAGE_TAG=${IMAGE_TAG:-latest}
+GITHUB_ACTOR=${GITHUB_ACTOR:-example}
+
+echo "=== Manual deploy: $IMAGE_TAG ==="
+
+echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+
+# Create versioned Caddyfile config (skip if already exists — same SHA = same content)
+docker config inspect "caddyfile_$IMAGE_TAG" >/dev/null 2>&1 || \
+	docker config create "caddyfile_$IMAGE_TAG" ./Caddyfile
+
+# --- hosting/docker-swarm-hetzner for backend/go-grpc-gateway (migration@1) ---
+echo "=== Running migrations: demo-api ==="
+docker run --rm \
+	--env-file .env \
+	"ghcr.io/example/demo-api:$IMAGE_TAG" \
+	./api-server -migrate
+
+echo "=== Deploying stack ==="
+IMAGE_TAG=$IMAGE_TAG docker stack deploy \
+	--with-registry-auth \
+	--prune \
+	-c docker-compose.yml \
+	-c docker-compose.swarm.yml \
+	demo
+
+docker image prune -f
+echo "=== Done ==="
+
+==> docker-compose.swarm.yml <==
+# Production overlay — merged on top of docker-compose.yml at deploy time:
+#   docker stack deploy -c docker-compose.yml -c docker-compose.swarm.yml \
+#     --with-registry-auth demo
+#
+# docker stack deploy never builds images (Swarm only pulls them), so this
+# file adds `image:` per service rather than needing to remove `build:` —
+# the base file's `build:` key is simply ignored in Swarm mode. Every
+# service is tagged with the same IMAGE_TAG (the commit SHA being deployed).
+#
+# The caddy service picks up an *externally* created Swarm config here
+# (see deploy.sh) instead of relying only on the bind-mounted Caddyfile
+# from docker-compose.yml. Swarm configs are immutable and versioned by
+# name, so a changed Caddyfile means creating a new named config and
+# pointing this file's `configs.caddyfile.name` at it — that's also what
+# makes Swarm recognize the caddy service needs to restart at all; a plain
+# bind mount's contents changing wouldn't trigger anything on its own.
+
+services:
+  # --- hosting/docker-swarm-hetzner for backend/go-grpc-gateway (http-service@1) ---
+  demo-api:
+    image: ghcr.io/example/demo-api:${IMAGE_TAG:-latest}
+    deploy:
+      replicas: 1
+      update_config:
+        order: start-first
+        failure_action: rollback
+        monitor: 30s
+      restart_policy:
+        condition: on-failure
+
+  caddy:
+    configs:
+      - source: caddyfile
+        target: /etc/caddy/Caddyfile
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+
+networks:
+  default:
+    driver: overlay
+    attachable: true # lets standalone containers (e.g. the migration run in deploy.sh) join
+
+configs:
+  caddyfile:
+    external: true
+    name: caddyfile_${IMAGE_TAG:-latest}
+
+==> docker-compose.yml <==
+# Generated by kiln from plugins: backend/go-grpc-gateway, hosting/docker-swarm-hetzner
+services:
+    caddy:
+        image: caddy:2-alpine
+        ports:
+            - 80:80
+            - 443:443
+        restart: always
+        volumes:
+            - ./Caddyfile:/etc/caddy/Caddyfile:ro
+            - caddy_data:/data
+            - caddy_config:/config
+    demo-api:
+        build:
+            context: ./demo-api
+            dockerfile: Dockerfile
+        container_name: demo-api
+        dns:
+            - 8.8.8.8
+            - 1.1.1.1
+        environment:
+            - DATABASE_URL=${DATABASE_URL}
+            - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+            - CORS_ORIGINS=${CORS_ORIGINS:-*}
+            - GRPC_PORT=9090
+        expose:
+            - "8080"
+        healthcheck:
+            interval: 30s
+            retries: 3
+            test:
+                - CMD
+                - wget
+                - -qO-
+                - http://localhost:8080/api/health
+            timeout: 5s
+        restart: on-failure
+volumes:
+    caddy_config: {}
+    caddy_data: {}
