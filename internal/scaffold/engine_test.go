@@ -256,3 +256,42 @@ func TestGenerateComposeConflict(t *testing.T) {
 		t.Fatal("expected a merge conflict error, got nil")
 	}
 }
+
+// TestGenerateBindingFragments covers per-binding fragments: one render per
+// bound provider, with the provider's contract fields layered over the
+// global values, into a named slot of a nested, escaped base path.
+func TestGenerateBindingFragments(t *testing.T) {
+	host := &plugin.Plugin{
+		Manifest: plugin.Manifest{Name: "host", Kind: plugin.KindHosting},
+		FS: fstest.MapFS{
+			"files/dot__ci/deploy.yml": &fstest.MapFile{Data: []byte("steps:\n  # kiln:insert build\n  - run: deploy {{APP_NAME}}\n")},
+			"bindings/http-service/dot__ci/deploy.yml@build.fragment": &fstest.MapFile{
+				Data: []byte("- run: build {{SERVICE_NAME}} for {{APP_NAME}}\n"),
+			},
+		},
+	}
+	api := &plugin.Plugin{Manifest: plugin.Manifest{Name: "api", Kind: plugin.KindBackend}, FS: fstest.MapFS{}}
+	worker := &plugin.Plugin{Manifest: plugin.Manifest{Name: "worker", Kind: plugin.KindGlue}, FS: fstest.MapFS{}}
+
+	result, err := Generate(Options{
+		Plugins: []*plugin.Plugin{api, worker, host},
+		Bindings: []plugin.Binding{
+			{Contract: "http-service@1", Consumer: host, Provider: api, Values: map[string]string{"SERVICE_NAME": "demo-api"}},
+			{Contract: "http-service@1", Consumer: host, Provider: worker, Values: map[string]string{"SERVICE_NAME": "demo-worker"}},
+		},
+		Values: Values{"APP_NAME": "demo"},
+	})
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+
+	want := "steps:\n" +
+		"  # --- hosting/host for backend/api (http-service@1) ---\n" +
+		"  - run: build demo-api for demo\n" +
+		"  # --- hosting/host for glue/worker (http-service@1) ---\n" +
+		"  - run: build demo-worker for demo\n" +
+		"  - run: deploy demo\n"
+	if got := string(result.Files[".ci/deploy.yml"].Content); got != want {
+		t.Errorf(".ci/deploy.yml =\n%s\nwant\n%s", got, want)
+	}
+}

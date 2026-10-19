@@ -2,6 +2,11 @@
 // to resolve plugins by kind and name.
 package plugin
 
+import (
+	"sort"
+	"strings"
+)
+
 // Kind identifies what category of project concern a plugin addresses.
 type Kind string
 
@@ -25,6 +30,22 @@ var kindOrder = map[Kind]int{
 	KindGlue:     5,
 }
 
+// Kinds returns every known Kind in application order.
+func Kinds() []Kind {
+	out := make([]Kind, 0, len(kindOrder))
+	for k := range kindOrder {
+		out = append(out, k)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Order() < out[j].Order() })
+	return out
+}
+
+// Known reports whether k is one of the kinds Kiln knows how to order.
+func (k Kind) Known() bool {
+	_, ok := kindOrder[k]
+	return ok
+}
+
 // Order returns k's position in the deterministic plugin-application order.
 // Unknown kinds sort last.
 func (k Kind) Order() int {
@@ -40,6 +61,60 @@ type Placeholder struct {
 	Description string `yaml:"description"`
 	Default     string `yaml:"default,omitempty"`
 	Required    bool   `yaml:"required,omitempty"`
+
+	// Flag, if set, exposes this placeholder as a `kiln new --<flag>` CLI
+	// option. Plugins sharing a placeholder name may share a flag.
+	Flag string `yaml:"flag,omitempty"`
+
+	// Derive computes this placeholder from another one when it isn't set
+	// explicitly. Tried before Default.
+	Derive *Derive `yaml:"derive,omitempty"`
+}
+
+// Derive computes a placeholder value from another placeholder's value,
+// without giving plugins a template language. Exactly one of Match or
+// Replace is used:
+//
+//   - Match + Template: if the regexp Match matches From's value, the value
+//     is Template expanded with the match's capture groups ($1, ${name}).
+//     No match leaves the placeholder unset.
+//   - Replace: every occurrence of each key in From's value is replaced
+//     with its value, e.g. {".": "/"} turns com.example.app into
+//     com/example/app.
+type Derive struct {
+	From     string            `yaml:"from"`
+	Match    string            `yaml:"match,omitempty"`
+	Template string            `yaml:"template,omitempty"`
+	Replace  map[string]string `yaml:"replace,omitempty"`
+}
+
+// Provide declares that a plugin implements a contract, with the values
+// the contract's schema asks for (see contracts/). A plugin may provide the
+// same contract more than once — e.g. one env@1 entry per env var.
+type Provide struct {
+	Contract string            `yaml:"contract"` // "<name>@<major>", e.g. "http-service@1"
+	With     map[string]string `yaml:"with,omitempty"`
+}
+
+// Consume declares that a plugin works with every selected plugin
+// providing a contract — e.g. a hosting plugin consumes http-service@1 to
+// deploy each service, without knowing which backend provided it.
+type Consume struct {
+	Contract string `yaml:"contract"`
+	// Min and Max bound how many providers must be bound. Max 0 means
+	// unlimited.
+	Min int `yaml:"min,omitempty"`
+	Max int `yaml:"max,omitempty"`
+	// As, if set, exports the single bound provider's fields as global
+	// placeholders named <As>_<FIELD> (e.g. API_PORT), so this plugin's
+	// files/ can reference them. Requires Max: 1.
+	As string `yaml:"as,omitempty"`
+}
+
+// ContractName returns the name part of a "<name>@<major>" contract ID.
+func ContractName(id string) string {
+	name, _, _ := strings.Cut(id, "@")
+	return name
 }
 
 // Manifest is the plugin.yaml contract every plugin ships.
@@ -56,6 +131,13 @@ type Manifest struct {
 	Conflicts []string `yaml:"conflicts,omitempty"`
 
 	Placeholders []Placeholder `yaml:"placeholders,omitempty"`
+
+	Provides []Provide `yaml:"provides,omitempty"`
+	Consumes []Consume `yaml:"consumes,omitempty"`
+
+	// NextSteps are shell lines printed after generation, rendered with the
+	// resolved placeholder values and run relative to the project root.
+	NextSteps []string `yaml:"next_steps,omitempty"`
 
 	// PostCopy is a path, relative to the plugin's own directory, to a shell
 	// script run after all selected plugins' files are copied and merged.
