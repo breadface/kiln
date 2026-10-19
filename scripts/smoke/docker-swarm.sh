@@ -13,12 +13,23 @@
 # server instead of ghcr.io, by rewriting the image host in the generated
 # files.
 #
+# With --payments, the project also gets payments/stripe, deployed with
+# PAYMENTS_PROVIDER=fake, and the payment flow is run against the real
+# stack and Postgres: create, pay, replay the outcome, read it back.
+#
 # Usage (from the repository root):
-#   scripts/smoke/docker-swarm.sh [--backend go-api|go-grpc-gateway]
+#   scripts/smoke/docker-swarm.sh [--backend go-api|go-grpc-gateway] [--payments]
 set -euo pipefail
 
 backend=go-api
-if [ "${1:-}" = "--backend" ]; then backend=$2; fi
+payments=""
+while [ $# -gt 0 ]; do
+	case "$1" in
+	--backend) backend=$2 && shift 2 ;;
+	--payments) payments=1 && shift ;;
+	*) echo "unknown argument: $1" >&2 && exit 2 ;;
+	esac
+done
 
 work=$(mktemp -d)
 net=kiln-smoke-$$
@@ -40,8 +51,8 @@ fail() {
 on_server() { docker exec "$server" docker "$@"; }
 curl_overlay() { on_server run --rm --network demo_default curlimages/curl:8.10.1 -s "$@"; }
 
-step "Generating project ($backend)"
-go run ./cmd/kiln new demo --backend "$backend" \
+step "Generating project ($backend${payments:+, payments/stripe})"
+go run ./cmd/kiln new demo --backend "$backend" ${payments:+--payments stripe} \
 	--module github.com/example/demo-api \
 	--domain demo.example.com --admin-email admin@example.com \
 	--dir "$work" --yes >/dev/null
@@ -73,6 +84,7 @@ printf '%s\n' \
 	"DATABASE_URL=postgres://postgres:postgres@$server_ip:5432/demo?sslmode=disable" \
 	"JWT_SECRET=$jwt_secret" \
 	"CORS_ORIGINS=*" >"$project/.env"
+if [ -n "$payments" ]; then echo "PAYMENTS_PROVIDER=fake" >>"$project/.env"; fi
 
 deploy() {
 	local tag=$1
@@ -97,6 +109,24 @@ container=$(on_server ps -q -f name=demo_demo-api | head -1)
 got_secret=$(on_server exec "$container" printenv JWT_SECRET)
 [ "$got_secret" = "$jwt_secret" ] || fail "JWT_SECRET reached the container as [$got_secret], want [$jwt_secret]"
 echo "env passed verbatim: JWT_SECRET=[$got_secret]"
+
+if [ -n "$payments" ]; then
+	step "Running the payment flow (fake provider, real Postgres)"
+	created=$(curl_overlay -X POST -H 'Content-Type: application/json' \
+		-d '{"amount":1500,"currency":"usd","description":"Smoke","success_url":"https://demo.example.com/ok","cancel_url":"https://demo.example.com/no"}' \
+		http://demo-api:8080/api/payments)
+	id=$(printf '%s' "$created" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
+	checkout=$(printf '%s' "$created" | sed -n 's/.*"checkout_url":"\([^"]*\)".*/\1/p')
+	if [ -z "$id" ] || [ -z "$checkout" ]; then fail "creating a payment returned: $created"; fi
+	echo "created $id"
+	pay() { curl_overlay -o /dev/null -w '%{http_code} %{redirect_url}' -d "result=$1" "http://demo-api:8080$checkout"; }
+	paid=$(pay succeeded)
+	[ "$paid" = "303 https://demo.example.com/ok" ] || fail "paying returned: $paid"
+	pay failed >/dev/null # a later outcome must not change a final status
+	status=$(curl_overlay "http://demo-api:8080/api/payments/$id" | sed -n 's/.*"status":"\([^"]*\)".*/\1/p')
+	[ "$status" = succeeded ] || fail "payment status is $status, want succeeded"
+	echo "paid, redirected, replay ignored: $id is $status"
+fi
 
 printf '\n# smoke2\n' >>"$project/Caddyfile"
 deploy smoke2
